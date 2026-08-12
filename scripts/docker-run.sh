@@ -15,6 +15,7 @@ fi
 docker run --detach \
   --name "$container" \
   --publish "$port:1456" \
+  --publish 18923:18923 \
   --volume worker-agents-data:/data \
   "$image" >/dev/null
 

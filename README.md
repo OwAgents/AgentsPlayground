@@ -79,7 +79,7 @@ PORT=3000 npm start
 ./scripts/docker-run.sh
 ```
 
-The script builds `worker-agents:local`, starts a `worker-agents` container, persists state in a named volume, and waits for the `/api/status` health check. Customize it with:
+The script builds `worker-agents:local`, starts a `worker-agents` container, publishes the dashboard on `1456` and Codex Web Local on `18923`, persists state in a named volume, and waits for the `/api/status` health check. Customize it with:
 
 ```bash
 WORKER_AGENTS_PORT=3000 \
