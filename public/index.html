@@ -144,7 +144,19 @@ function publicAgentUrl(agent) {
   try {
     const source = new URL(agent.url || '/', window.location.href);
     const target = new URL(window.location.href);
-    if (agent.proxied) {
+    const localDashboard = ['localhost', '127.0.0.1', '::1'].includes(target.hostname.toLowerCase());
+    if (localDashboard) {
+      const label = String(agent.id || '')
+        .toLowerCase()
+        .replace(/^_+|_+$/g, '')
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      target.hostname = `${label}.localhost`;
+      target.pathname = source.pathname || '/';
+      const params = new URLSearchParams(source.search);
+      if (agent.id === 'web-vnc') params.set('path', 'websockify');
+      target.search = params.toString();
+    } else if (agent.proxied) {
       target.pathname = `/proxy/${agent.id}${source.pathname || '/'}`;
       const params = new URLSearchParams(source.search);
       if (agent.id === 'web-vnc') params.set('path', `proxy/${agent.id}/websockify`);

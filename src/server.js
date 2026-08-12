@@ -154,9 +154,33 @@ function getOpenClawProxyTarget() {
 }
 
 function getAgentProxyTarget(id) {
+  if (id === '__9router__') {
+    const router = nineRouter.getStatus();
+    if (!router.livePort || router.state !== 'running') return null;
+    return { port: router.livePort };
+  }
   const snapshot = supervisor.snapshot().find((agent) => agent.id === id);
   if (!snapshot?.port || snapshot.state !== 'running') return null;
   return { port: snapshot.port };
+}
+
+function localhostLabel(id) {
+  return String(id || '')
+    .toLowerCase()
+    .replace(/^_+|_+$/g, '')
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function localhostAgentIdFromRequest(req) {
+  const hostname = String(req.headers.host || '')
+    .toLowerCase()
+    .replace(/:\d+$/, '');
+  if (!hostname.endsWith('.localhost')) return '';
+  const label = hostname.slice(0, -'.localhost'.length);
+  if (!label || label.includes('.')) return '';
+  if (label === localhostLabel('__9router__')) return '__9router__';
+  return supervisor.snapshot().find((agent) => localhostLabel(agent.id) === label)?.id || '';
 }
 
 function encodedPortFromRequest(req) {
@@ -200,7 +224,7 @@ function proxyPortUpgrade(req, socket, port) {
   upstream.on('error', () => socket.end('HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n'));
 }
 
-function proxyAgentHttp(req, res, id, prefix) {
+function proxyAgentHttp(req, res, id, prefix = '') {
   const target = getAgentProxyTarget(id);
   if (!target) {
     sendJson(res, 503, { error: `${id} is not running` });
@@ -210,7 +234,7 @@ function proxyAgentHttp(req, res, id, prefix) {
     hostname: '127.0.0.1',
     port: target.port,
     method: req.method,
-    path: req.url.replace(prefix, '') || '/',
+    path: prefix ? (req.url.replace(prefix, '') || '/') : (req.url || '/'),
     headers: { ...req.headers, host: `127.0.0.1:${target.port}` }
   }, (upstreamRes) => {
     res.writeHead(upstreamRes.statusCode || 502, upstreamRes.headers);
@@ -220,14 +244,15 @@ function proxyAgentHttp(req, res, id, prefix) {
   req.pipe(upstream);
 }
 
-function proxyAgentUpgrade(req, socket, id, prefix) {
+function proxyAgentUpgrade(req, socket, id, prefix = '') {
   const target = getAgentProxyTarget(id);
   if (!target) {
     socket.end('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n');
     return;
   }
   const upstream = net.connect(target.port, '127.0.0.1', () => {
-    const lines = [`GET ${req.url.replace(prefix, '') || '/'} HTTP/1.1`, `Host: 127.0.0.1:${target.port}`];
+    const path = prefix ? (req.url.replace(prefix, '') || '/') : (req.url || '/');
+    const lines = [`GET ${path} HTTP/1.1`, `Host: 127.0.0.1:${target.port}`];
     for (const [key, value] of Object.entries(req.headers)) {
       if (!value || key.toLowerCase() === 'host') continue;
       for (const item of Array.isArray(value) ? value : [value]) lines.push(`${key}: ${item}`);
@@ -412,6 +437,11 @@ async function handleRequest(req, res) {
     proxyPortHttp(req, res, encodedPort);
     return;
   }
+  const localhostAgentId = localhostAgentIdFromRequest(req);
+  if (localhostAgentId) {
+    proxyAgentHttp(req, res, localhostAgentId);
+    return;
+  }
 
   if (url.pathname === '/favicon.ico' && (req.method === 'GET' || req.method === 'HEAD')) {
     res.writeHead(204, { 'cache-control': 'public, max-age=86400' });
@@ -507,6 +537,12 @@ server.on('upgrade', (req, socket) => {
   const encodedPort = encodedPortFromRequest(req);
   if (encodedPort && encodedPort !== config.port) {
     proxyPortUpgrade(req, socket, encodedPort);
+    return;
+  }
+  const localhostAgentId = localhostAgentIdFromRequest(req);
+  if (localhostAgentId) {
+    if (localhostAgentId === 'openclaw') handleOpenClawUpgrade(req, socket);
+    else proxyAgentUpgrade(req, socket, localhostAgentId);
     return;
   }
   if (req.url === '/proxy/web-vnc' || req.url?.startsWith('/proxy/web-vnc/')) {
