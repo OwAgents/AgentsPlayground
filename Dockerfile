@@ -20,7 +20,7 @@ ENV AGENT_CONSOLE_HOST=0.0.0.0 \
 EXPOSE 1456
 VOLUME ["/data"]
 
-HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=6 \
+HEALTHCHECK --interval=10s --timeout=10s --start-period=15s --retries=6 \
   CMD node -e "fetch('http://127.0.0.1:1456/api/status').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
 CMD ["npm", "start"]
