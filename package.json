@@ -1,0 +1,22 @@
+{
+  "name": "worker-agents",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Generic Node.js control plane for running local agent workers.",
+  "scripts": {
+    "start": "node src/server.js",
+    "start:clean-9router": "lsof -tiTCP:20128 -sTCP:LISTEN 2>/dev/null | xargs -r kill -9; rm -rf \"$HOME/9router\" \"$HOME/.9router\" /tmp/9router.log && node src/server.js",
+    "start:clean-opencode": "lsof -tiTCP:18924 -sTCP:LISTEN 2>/dev/null | xargs -r kill -9; npm uninstall -g opencode-ai || true; rm -rf \"$HOME/.opencode\" /tmp/agent-console-agent-opencode.log && node src/server.js",
+    "start:clean-all": "lsof -tiTCP:20128 -sTCP:LISTEN 2>/dev/null | xargs -r kill -9; lsof -tiTCP:18924 -sTCP:LISTEN 2>/dev/null | xargs -r kill -9; npm uninstall -g opencode-ai || true; rm -rf \"$HOME/9router\" \"$HOME/.9router\" /tmp/9router.log \"$HOME/.opencode\" /tmp/agent-console-agent-opencode.log && node src/server.js",
+    "dev": "node --watch src/server.js",
+    "check": "node --check src/config.js && node --check src/auth.js && node --check src/agents.js && node --check src/9router.js && node --check src/setup.js && node --check src/server.js",
+    "start:windows": "powershell -ExecutionPolicy Bypass -File ./scripts/start-windows.ps1",
+    "start:windows:clean-9router": "powershell -ExecutionPolicy Bypass -File ./scripts/start-windows.ps1 -Clean9Router",
+    "start:windows:clean-opencode": "powershell -ExecutionPolicy Bypass -File ./scripts/start-windows.ps1 -CleanOpenCode",
+    "start:windows:clean-all": "powershell -ExecutionPolicy Bypass -File ./scripts/start-windows.ps1 -CleanAll"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

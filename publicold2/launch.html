@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Launching Agent — Agent Console</title>
+<style>
+:root {
+  color-scheme: dark;
+  --ink: #101211;
+  --panel: #171a18;
+  --panel-strong: #20251f;
+  --line: #3b443d;
+  --line-soft: #29302b;
+  --paper: #efe6d0;
+  --muted: #a7ad9e;
+  --green: #55ad7b;
+  --green-deep: #265b43;
+  --amber: #c58a3a;
+  --red: #c85d56;
+  --blue: #6e94b8;
+  --shadow: rgba(0, 0, 0, 0.28);
+  font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Liberation Mono", Menlo, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: linear-gradient(90deg, rgba(239,230,208,0.025) 1px, transparent 1px),
+              linear-gradient(180deg, rgba(239,230,208,0.02) 1px, transparent 1px),
+              var(--ink);
+  background-size: 28px 28px;
+  color: var(--paper);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.shell { width: min(680px, calc(100vw - 32px)); }
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 32px;
+}
+.eyebrow {
+  margin: 0 0 6px;
+  color: var(--amber);
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.8px;
+}
+h1 { margin: 0; font-size: 22px; font-weight: 500; }
+h2 { margin: 0; font-size: 18px; font-weight: 500; }
+.launch-status {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--line-soft);
+  border-top-color: var(--green);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+  flex-shrink: 0;
+}
+.spinner.done { border-color: var(--green); animation: none; }
+.spinner.error { border-color: var(--red); animation: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.state-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+}
+.state-badge.starting { background: var(--amber); color: #000; }
+.state-badge.running  { background: var(--green); color: #000; }
+.state-badge.error    { background: var(--red); color: #fff; }
+.state-badge.stopped  { background: var(--line); color: var(--muted); }
+.step-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.step-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--panel-strong);
+}
+.step-chip.done  { color: var(--green); }
+.step-chip.skip  { color: var(--muted); }
+.step-chip.todo  { color: var(--amber); }
+.log-box {
+  background: #0b0d0c;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 14px;
+  min-height: 200px;
+  max-height: 340px;
+  overflow: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #d8d2c1;
+  margin-bottom: 20px;
+}
+.log-box:empty::before {
+  content: 'Waiting for output...';
+  color: var(--muted);
+}
+.actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.button {
+  display: inline-block;
+  padding: 9px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: var(--panel-strong);
+  color: var(--paper);
+  transition: background 0.15s, border-color 0.15s;
+}
+.button:hover { border-color: var(--line); }
+.button.primary {
+  background: var(--green-deep);
+  color: var(--green);
+  border-color: var(--green);
+}
+.button.primary:hover { background: var(--green); color: var(--ink); }
+.button:disabled { opacity: 0.4; pointer-events: none; }
+.meta {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 12px;
+  color: var(--muted);
+}
+.meta a { color: var(--blue); }
+@media (max-width: 600px) { .card { padding: 20px; } }
+</style>
+</head>
+<body>
+<div class="shell">
+<div class="card">
+  <p class="eyebrow">Agent Console</p>
+
+  <!-- Setup preflight phase -->
+  <div class="launch-status" id="setupPhase" style="display:none">
+    <div class="spinner" id="setupSpinner"></div>
+    <div style="flex:1">
+      <h1>Preparing environment</h1>
+      <div style="margin-top:6px;font-size:13px;color:var(--muted)" id="setupStepLabel"></div>
+      <div class="step-row" id="setupStepsList"></div>
+    </div>
+  </div>
+
+  <!-- Agent launch phase -->
+  <div class="launch-status" id="launchPhase" style="display:none">
+    <div class="spinner" id="spinner"></div>
+    <div>
+      <h1 id="agentName">Launching <span id="agentIdLabel"></span></h1>
+      <div class="state-badge starting" id="stateBadge">Starting</div>
+    </div>
+  </div>
+
+  <div class="log-box" id="logBox"></div>
+
+  <div class="actions">
+    <a class="button primary" id="openBtn" href="#" disabled>Open Agent</a>
+    <a class="button" id="openBrowserBtn" href="#" target="_blank" rel="noreferrer" disabled>Web</a>
+    <a class="button" id="dashboardLink" href="/?dashboard=1">Dashboard</a>
+  </div>
+
+  <div class="meta">
+    <span id="metaPort"></span>
+    <span id="setupMeta" style="margin-left:12px"></span>
+  </div>
+</div>
+</div>
+
+<script>
+const LAUNCH_AGENT = /* launch-agent */ '{{LAUNCH_AGENT}}' || '';
+const agentIdLabel = document.querySelector('#agentIdLabel');
+const agentNameEl = document.querySelector('#agentName');
+const setupPhase = document.querySelector('#setupPhase');
+const setupSpinner = document.querySelector('#setupSpinner');
+const setupStepLabel = document.querySelector('#setupStepLabel');
+const setupStepsList = document.querySelector('#setupStepsList');
+const launchPhase = document.querySelector('#launchPhase');
+const setupMeta = document.querySelector('#setupMeta');
+const spinner = document.querySelector('#spinner');
+const stateBadge = document.querySelector('#stateBadge');
+const logBox = document.querySelector('#logBox');
+const openBtn = document.querySelector('#openBtn');
+const openBrowserBtn = document.querySelector('#openBrowserBtn');
+const metaPort = document.querySelector('#metaPort');
+
+agentIdLabel.textContent = LAUNCH_AGENT;
+
+let foundAgentUrl = '';
+
+function publicAgentUrl(agent) {
+  if (!agent || !agent.port) return agent?.url || '#';
+  try {
+    const source = new URL(agent.url || '/', window.location.href);
+    const target = new URL(window.location.href);
+    target.port = String(agent.port);
+    target.pathname = source.pathname || '/';
+    target.search = source.search || '';
+    target.hash = source.hash || '';
+    return target.toString();
+  } catch {
+    return agent.url || '#';
+  }
+}
+let setupDone = false;
+
+// ── Setup phase ──
+
+function renderSetupChips(steps) {
+  setupStepsList.innerHTML = '';
+  for (const s of steps) {
+    const el = document.createElement('span');
+    el.className = 'step-chip';
+    if (s.done)      { el.classList.add('done'); el.textContent = '\u2713 ' + s.label; }
+    else if (s.skipped) { el.classList.add('skip'); el.textContent = '\u2014 ' + s.label; }
+    else               { el.classList.add('todo'); el.textContent = '\u25CB ' + s.label; }
+    setupStepsList.appendChild(el);
+  }
+}
+
+function showSetupPhase(setup) {
+  setupPhase.style.display = '';
+  launchPhase.style.display = 'none';
+  logBox.style.display = 'none';
+  if (setup.running) {
+    setupSpinner.className = 'spinner';
+    setupStepLabel.textContent = setup.currentStep || 'Starting...';
+  } else if (setup.done) {
+    setupSpinner.className = 'spinner done';
+    setupStepLabel.textContent = 'Environment ready';
+    if (!setupDone) {
+      setupDone = true;
+      setTimeout(showLaunchPhase, 400);
+    }
+  }
+  renderSetupChips(setup.steps);
+  setupMeta.textContent = setup.steps.filter(s => s.done).length + '/' + setup.steps.length + ' steps done';
+}
+
+function showLaunchPhase() {
+  setupPhase.style.display = 'none';
+  launchPhase.style.display = '';
+  logBox.style.display = '';
+}
+
+// ── Agent state ──
+
+function setState(state, agent) {
+  spinner.className = 'spinner';
+  if (state === 'running') spinner.classList.add('done');
+  else if (state === 'error' || state === 'stopped') spinner.classList.add('error');
+
+  stateBadge.className = 'state-badge ' + state;
+  stateBadge.textContent = state.charAt(0).toUpperCase() + state.slice(1);
+
+  if (state === 'running' && agent && agent.url) {
+    foundAgentUrl = publicAgentUrl(agent);
+    openBtn.href = foundAgentUrl;
+    openBtn.removeAttribute('disabled');
+    openBrowserBtn.href = foundAgentUrl;
+    openBrowserBtn.removeAttribute('disabled');
+    openBtn.textContent = 'Open ' + (agent.name || LAUNCH_AGENT);
+  }
+
+  if (agent && agent.port) {
+    metaPort.textContent = 'Port ' + agent.port + (agent.pid ? ' · PID ' + agent.pid : '');
+  }
+}
+
+function appendLog(text) {
+  const line = document.createElement('div');
+  line.textContent = text;
+  logBox.appendChild(line);
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+// ── SSE + polling ──
+
+function handleStatusPayload(data) {
+  const setup = data.setup;
+  if (setup && (!setup.done || !setupDone)) {
+    showSetupPhase(setup);
+    return true;
+  }
+  return false;
+}
+
+function handleAgentPayload(data) {
+  const agents = data.agents || [];
+  const agent = agents.find((a) => a.id === LAUNCH_AGENT);
+  if (!agent) return;
+  setState(agent.state, agent);
+  if (agent.logs) {
+    logBox.innerHTML = '';
+    agent.logs.forEach(appendLog);
+  }
+}
+
+function connectEvents() {
+  const events = new EventSource('/api/events');
+  events.addEventListener('status', (event) => {
+    const data = JSON.parse(event.data);
+    if (!handleStatusPayload(data)) {
+      handleAgentPayload(data);
+    }
+  });
+  events.addEventListener('error', () => {});
+}
+
+async function pollStatus() {
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+    if (!handleStatusPayload(data)) {
+      handleAgentPayload(data);
+    }
+  } catch {}
+}
+
+// Auto-open when running
+let autoOpened = false;
+function checkAutoOpen() {
+  if (autoOpened) return;
+  if (foundAgentUrl) {
+    autoOpened = true;
+    setTimeout(() => { window.location.href = foundAgentUrl; }, 600);
+  }
+}
+
+const origSetState = setState;
+setState = function(state, agent) {
+  origSetState(state, agent);
+  checkAutoOpen();
+};
+
+pollStatus().then(connectEvents).catch(connectEvents);
+setInterval(pollStatus, 3000);
+</script>
+</body>
+</html>

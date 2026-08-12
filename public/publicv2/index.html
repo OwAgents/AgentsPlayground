@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f6f3ee">
+    <title>WorkerAgents · Your agent launchpad</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="app" id="top">
+      <header class="topbar">
+        <a class="brand" href="#top" aria-label="WorkerAgents home">
+          <span class="brand-mark">✦</span>
+          <span>
+            <h1>WorkerAgents</h1>
+            <p>Your agent launchpad</p>
+          </span>
+        </a>
+        <div class="top-actions">
+          <span class="chip" id="connectionChip"><span class="dot"></span><span id="connectionState">Connecting…</span></span>
+          <a class="btn ghost sm" id="jumpLogs" href="#logDrawer">View logs</a>
+          <label class="theme-wrap" for="themeSelect">
+            <span>Theme</span>
+            <select id="themeSelect" class="theme-select" aria-label="Theme">
+              <option value="system">System</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </label>
+        </div>
+      </header>
+
+      <section class="hero">
+        <div class="hero-card">
+          <p class="eyebrow">Your AI workspace</p>
+          <h2>Pick an agent.<br><em>Get something done.</em></h2>
+          <p class="hero-copy">Everything is ready. Running agents sit right on top with one big button — or launch something new below in a click.</p>
+          <div class="hero-cta">
+            <a class="btn open xl" href="#runningSection">See what's running <span>↓</span></a>
+            <a class="btn primary xl" id="jumpLaunch" href="#launchSection">Launch an agent <span>＋</span></a>
+          </div>
+        </div>
+        <div class="stat-stack">
+          <div class="stat"><b data-metric="running">0</b><span>Running now</span></div>
+          <div class="stat"><b data-metric="busy">0</b><span>Starting up</span></div>
+          <div class="stat"><b data-metric="errors">0</b><span>Need attention</span></div>
+          <div class="stat"><b data-metric="total">0</b><span>Agents total</span></div>
+        </div>
+      </section>
+
+      <section class="section" id="runningSection">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Ready for you</p>
+            <h3>Running now</h3>
+          </div>
+          <p>Jump straight back in — your live agents live up top.</p>
+        </div>
+        <div class="live-grid" id="liveGrid" aria-live="polite"></div>
+        <div class="empty" id="liveEmpty" hidden>
+          <p class="empty-mark">🌱</p>
+          <h3>Nothing running yet</h3>
+          <p>Launch an agent below and it will pop up here the moment it is ready.</p>
+          <a class="btn primary" href="#launchSection">Launch an agent ↓</a>
+        </div>
+      </section>
+
+      <section class="section" id="launchSection">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Start something new</p>
+            <h3>Launch an agent</h3>
+          </div>
+          <p>Not sure where to start? OpenCode is a friendly first pick.</p>
+        </div>
+        <div class="launch-grid" id="launchGrid" aria-live="polite"></div>
+      </section>
+
+      <section class="tools">
+        <article class="tool-card">
+          <div class="tool-icon">⌁</div>
+          <div>
+            <p class="eyebrow">AI connections</p>
+            <h4 id="authTitle">Provider settings</h4>
+            <p id="authDetail">Connect and manage the models your agents use.</p>
+          </div>
+          <a class="btn ghost" id="providersLink" href="#" target="_blank" rel="noreferrer">Manage providers ↗</a>
+        </article>
+        <article class="tool-card">
+          <div class="tool-icon">✦</div>
+          <div>
+            <p class="eyebrow">Capabilities</p>
+            <h4>Agent skills</h4>
+            <p id="skillsDetail">Keep your agents' shared skills up to date.</p>
+          </div>
+          <button class="btn primary" id="updateSkillsBtn" type="button">Update skills</button>
+        </article>
+      </section>
+
+      <section class="drawer" id="logDrawer">
+        <div class="drawer-head">
+          <div>
+            <p class="eyebrow">Live activity</p>
+            <h3 id="logTitle">Choose an agent to see activity</h3>
+          </div>
+          <label class="log-pick" for="logSelect"><span>Showing</span><select id="logSelect" aria-label="Select log stream"></select></label>
+        </div>
+        <pre id="logOutput">No activity yet.</pre>
+      </section>
+
+      <footer>
+        <span class="footer-brand">WorkerAgents</span>
+        <span id="buildVersion"></span>
+        <span data-worker-name>Your worker</span>
+      </footer>
+    </div>
+    <script src="./app.js"></script>
+  </body>
+</html>
