@@ -15,7 +15,8 @@ const contentTypes = new Map([
   ['.html', 'text/html; charset=utf-8'],
   ['.css', 'text/css; charset=utf-8'],
   ['.js', 'text/javascript; charset=utf-8'],
-  ['.json', 'application/json; charset=utf-8']
+  ['.json', 'application/json; charset=utf-8'],
+  ['.svg', 'image/svg+xml']
 ]);
 const ANSI = /\u001B\[[0-9;?]*[ -/]*[@-~]/g;
 const HERMES_CONFIG_PATH = path.join(config.hermesHome, 'config.yaml');

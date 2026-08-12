@@ -493,8 +493,11 @@ async function ensureWebVncInstalled(log) {
   }
   const required = ['Xvfb', 'fluxbox', 'x11vnc', 'websockify'];
   if (required.every(commandExists) && fs.existsSync('/usr/share/novnc/vnc.html')) return false;
+  const installCommand = typeof process.getuid === 'function' && process.getuid() === 0
+    ? 'apt-get update && env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends xvfb fluxbox x11vnc novnc websockify xterm dbus-x11'
+    : 'sudo -n apt-get update && sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends xvfb fluxbox x11vnc novnc websockify xterm dbus-x11';
   await runCommand(
-    'sudo -n apt-get update && sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends xvfb fluxbox x11vnc novnc websockify xterm dbus-x11',
+    installCommand,
     { onData: log }
   );
   if (!fs.existsSync('/usr/share/novnc/vnc.html')) {
