@@ -22,6 +22,18 @@
 
 ---
 
+## 📸 Mission Control, Caught in the Act
+
+<div align="center">
+
+<img src="docs/images/dashboard.png" alt="Worker Agents dashboard showing agent controls and live runtime states" width="555" />
+
+<sub>Real dashboard. Real runtime states. No actors were paid, although several agents requested API credits.</sub>
+
+</div>
+
+---
+
 ## 🧠 TL;DR
 
 Worker Agents is a local Node.js control plane for launching and supervising agent UIs from one browser dashboard. It tracks ports, processes, URLs, logs, errors, and status so you can stop asking, “Wait… which terminal was OpenClaw in?”
