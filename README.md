@@ -26,7 +26,7 @@
 
 <div align="center">
 
-<img src="docs/images/dashboard.png" alt="Worker Agents dashboard showing agent controls and live runtime states" width="555" />
+<img src="docs/images/dashboard.jpg" alt="Worker Agents dashboard showing agent controls and live runtime states" width="555" />
 
 <sub>Real dashboard. Real runtime states. No actors were paid, although several agents requested API credits.</sub>
 
