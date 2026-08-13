@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vue-tsc -b && cp source.html index.html && vite build && cp dist/index.html ./index.html && cp -R dist/assets ./assets",
+    "build": "vue-tsc -b && cp source.html index.html && vite build && cp dist/index.html ./index.html && cp -R dist/assets/. ./assets/",
     "dev": "vite --host 0.0.0.0",
     "typecheck": "vue-tsc -b"
   },
