@@ -71,7 +71,25 @@ const iconFor = (agent: Agent) => icons[agent.id] || ''
 const isBusy = (agent: Agent) => ['installing', 'starting', 'stopping'].includes(agent.state)
 const canStop = (agent: Agent) => ['running', 'error', 'starting', 'installing'].includes(agent.state)
 const stateClass = (state: string) => state === 'running' ? 'bg-emerald-50 text-emerald-700' : state === 'error' ? 'bg-rose-50 text-rose-700' : isBusy({ state } as Agent) ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500'
-function agentUrl(agent: Agent) { if (!agent.port) return agent.url || '#'; const url = new URL(agent.url || '/', location.href); const target = new URL(location.href); target.port = String(agent.port); target.pathname = url.pathname; return target.toString() }
+function agentUrl(agent: Agent) {
+  if (!agent.port) return agent.url || '#'
+  const source = new URL(agent.url || '/', location.href)
+  const current = new URL(location.href)
+  const suffix = '.agentsweb.space'
+  const isAgentsWeb = current.hostname.endsWith(suffix)
+  const isHttps = current.protocol === 'https:'
+  if (isAgentsWeb && isHttps) {
+    const rawBase = current.hostname.slice(0, -suffix.length).replace(/-\d+$/, '')
+    source.protocol = 'https:'
+    source.hostname = `${rawBase}-${agent.port}${suffix}`
+    source.port = ''
+  } else {
+    source.protocol = current.protocol
+    source.hostname = current.hostname
+    source.port = String(agent.port)
+  }
+  return source.toString()
+}
 async function act(agent: Agent, action: string) { await fetch(`/api/agents/${encodeURIComponent(agent.id)}/${action}`, { method: 'POST' }) }
 function selectLogs(agent: Agent) { selectedId.value = agent.id; document.querySelector('pre')?.scrollIntoView({ behavior: 'smooth' }) }
 </script>
