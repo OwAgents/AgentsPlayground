@@ -9,6 +9,7 @@ import * as nineRouter from './9router.js';
 import { createLoginUrl, exchangeCodeForTokens, getAuthStatus, logout } from './auth.js';
 import { supervisor } from './agents.js';
 import { ensureSshd, runSetup, getSetupStatus, onSetupEvent, syncSkills } from './setup.js';
+import { installSkill, listInstalledSkills, readInstalledSkill, searchSkills } from './skill-hub.js';
 
 const publicDir = path.join(config.projectRoot, 'public');
 const contentTypes = new Map([
@@ -49,6 +50,18 @@ function sendJson(res, status, payload) {
 function sendHtml(res, status, body) {
   res.writeHead(status, { 'content-type': 'text/html; charset=utf-8' });
   res.end(body);
+}
+
+async function readJsonBody(req, limit = 64 * 1024) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > limit) throw new Error('Request body is too large.');
+    chunks.push(chunk);
+  }
+  if (!chunks.length) return {};
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
 function readFileSafe(filePath) {
@@ -492,6 +505,38 @@ async function handleRequest(req, res) {
       sendJson(res, 200, { ok: result.ok, error: result.err || null, changed: result.changed || false, summary: result.summary || '' });
     } catch (error) {
       sendJson(res, 500, { ok: false, error: error.message });
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/skills-hub' && req.method === 'GET') {
+    sendJson(res, 200, { installed: listInstalledSkills() });
+    return;
+  }
+
+  if (url.pathname === '/api/skills-hub/search' && req.method === 'GET') {
+    try {
+      sendJson(res, 200, { results: await searchSkills(url.searchParams.get('q')) });
+    } catch (error) {
+      sendJson(res, 502, { error: error.message || 'Skill search failed.' });
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/skills-hub/readme' && req.method === 'GET') {
+    const skill = readInstalledSkill(url.searchParams.get('name'));
+    if (!skill) sendJson(res, 404, { error: 'Installed skill not found.' });
+    else sendJson(res, 200, skill);
+    return;
+  }
+
+  if (url.pathname === '/api/skills-hub/install' && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req);
+      const skill = await installSkill(body.source, body.name);
+      sendJson(res, 200, { ok: true, skill });
+    } catch (error) {
+      sendJson(res, 502, { ok: false, error: error.message || 'Skill installation failed.' });
     }
     return;
   }
