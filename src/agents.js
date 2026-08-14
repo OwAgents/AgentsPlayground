@@ -529,7 +529,7 @@ function defaultWebVncCommand(port) {
     'trap cleanup EXIT INT TERM',
     'fluxbox >/tmp/worker-agents-web-vnc-fluxbox.log 2>&1 &',
     'fluxbox_pid=$!',
-    `x11vnc -display ${shellQuote(display)} -forever -shared -nopw -rfbport ${rfbPort} >/tmp/worker-agents-web-vnc-x11vnc.log 2>&1 &`,
+    `x11vnc -display ${shellQuote(display)} -forever -shared -nopw -noxdamage -rfbport ${rfbPort} >/tmp/worker-agents-web-vnc-x11vnc.log 2>&1 &`,
     'x11vnc_pid=$!',
     'xterm -geometry 120x35+40+40 -title "Worker Terminal" >/tmp/worker-agents-web-vnc-xterm.log 2>&1 &',
     `for i in $(seq 1 15); do lsof -nP -iTCP:${rfbPort} -sTCP:LISTEN >/dev/null 2>&1 && break; sleep 1; done; lsof -nP -iTCP:${rfbPort} -sTCP:LISTEN >/dev/null 2>&1 || { echo "x11vnc did not start on port ${rfbPort}"; exit 1; }`,
@@ -991,7 +991,11 @@ const builtInDefinitions = [
     id: 'web-vnc',
     name: 'Web VNC',
     basePort: 18975,
-    path: '/vnc.html?autoconnect=1&resize=scale',
+    // The broker mounts this agent below /proxy/web-vnc. noVNC resolves its
+    // WebSocket path from this query value; using the broker root works for
+    // both the normal and lightweight clients, while the old default path
+    // attempted a socket URL the public proxy did not route correctly.
+    path: '/vnc.html?autoconnect=1&resize=scale&path=proxy%2Fweb-vnc',
     proxied: true,
     command: (port) => applyPortTemplate(
       commandFromEnv('AGENT_CMD_WEB_VNC', process.platform === 'darwin' ? defaultMacWebVncCommand(port) : defaultWebVncCommand(port)),
