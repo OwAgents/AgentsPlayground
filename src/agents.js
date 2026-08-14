@@ -532,7 +532,7 @@ function defaultWebVncCommand(port) {
     `x11vnc -display ${shellQuote(display)} -forever -shared -nopw -rfbport ${rfbPort} >/tmp/worker-agents-web-vnc-x11vnc.log 2>&1 &`,
     'x11vnc_pid=$!',
     'xterm -geometry 120x35+40+40 -title "Worker Terminal" >/tmp/worker-agents-web-vnc-xterm.log 2>&1 &',
-    `python3 -c 'import socket,time,sys; s=socket.socket(); deadline=time.time()+15; ok=False\nwhile time.time()<deadline:\n try: s.connect(("127.0.0.1",${rfbPort})); ok=True; break\n except OSError: time.sleep(0.1)\n s.close(); s=socket.socket()\ns.close(); sys.exit(0 if ok else 1)' || { echo "x11vnc did not start on port ${rfbPort}"; exit 1; }`,
+    `for i in $(seq 1 60); do python3 -c 'import socket; s=socket.socket(); s.settimeout(0.2); s.connect(("127.0.0.1",${rfbPort})); s.close()' >/dev/null 2>&1 && break; sleep 1; done; python3 -c 'import socket; s=socket.socket(); s.settimeout(1); s.connect(("127.0.0.1",${rfbPort})); s.close()' || { echo "x11vnc did not start on port ${rfbPort}"; exit 1; }`,
     `exec websockify --web=/usr/share/novnc ${port} 127.0.0.1:${rfbPort}`
   ].join('\n');
 }
