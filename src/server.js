@@ -25,8 +25,6 @@ const ROUTER_LOG_PATH = '/tmp/9router.log';
 const consoleLogs = [];
 const MAX_CONSOLE_LOGS = 500;
 
-
-
 function captureConsoleLog(level, args) {
   const raw = [].map.call(args, String).join(' ');
   const clean = raw.replace(ANSI, '').trimEnd();

@@ -9,7 +9,7 @@
         </div>
       </div>
       <div class="flex items-center gap-2 text-xs text-slate-500">
-        <span class="hidden rounded-full border border-slate-200 bg-white px-2.5 py-1 sm:inline">{{ runningCount }}/{{ agents.length }} running</span>
+        <span class="hidden rounded-full border border-slate-200 bg-white px-2.5 py-1 sm:inline">{{ runningCount }}/{{ visibleAgents.length }} running</span>
         <span class="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1">
           <i class="h-1.5 w-1.5 rounded-full" :class="connected ? 'bg-emerald-500' : 'bg-amber-500'"></i>{{ connected ? 'Live' : 'Connecting' }}
         </span>
@@ -23,7 +23,7 @@
           <p class="mt-1 text-sm text-slate-500">Launch, inspect, and control the agent apps available on this machine.</p>
         </div>
         <div class="grid gap-3 sm:grid-cols-2">
-          <article v-for="agent in agents" :key="agent.id" class="rounded-xl border border-slate-200 bg-white p-4 transition hover:border-slate-300 hover:shadow-sm">
+          <article v-for="agent in visibleAgents" :key="agent.id" class="rounded-xl border border-slate-200 bg-white p-4 transition hover:border-slate-300 hover:shadow-sm">
             <div class="flex items-start gap-3">
               <div class="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-slate-100 text-sm font-semibold text-slate-500">
                 <img v-if="iconFor(agent)" :src="iconFor(agent)" alt="" class="h-full w-full object-cover" />
@@ -63,9 +63,10 @@ import type { Agent } from '../types'
 const props = defineProps<{ agents: Agent[]; workerName: string; connected: boolean }>()
 defineEmits<{ 'open-menu': [] }>()
 const selectedId = ref('')
+const visibleAgents = computed(() => props.agents.filter(agent => agent.id !== '__console__'))
 watch(() => props.agents, (agents) => { if (!agents.some(a => a.id === selectedId.value)) selectedId.value = agents[0]?.id || '' }, { immediate: true })
 const selected = computed(() => props.agents.find(a => a.id === selectedId.value))
-const runningCount = computed(() => props.agents.filter(a => a.state === 'running').length)
+const runningCount = computed(() => visibleAgents.value.filter(a => a.state === 'running').length)
 const icons: Record<string, string> = { 'codex-web-local': '/icons/codex.png', opencode: '/icons/opencode.png', 'hermes-webui': '/icons/hermes.png', openwork: '/icons/openwork.png', 'agent-zero': '/icons/agent-zero.png', openclaw: '/icons/openclaw.png' }
 const iconFor = (agent: Agent) => icons[agent.id] || ''
 const isBusy = (agent: Agent) => ['installing', 'starting', 'stopping'].includes(agent.state)
@@ -74,6 +75,12 @@ const stateClass = (state: string) => state === 'running' ? 'bg-emerald-50 text-
 function agentUrl(agent: Agent) {
   if (!agent.port) return agent.url || '#'
   const source = new URL(agent.url || '/', location.href)
+  if (agent.proxied) {
+    const target = new URL(`/proxy/${encodeURIComponent(agent.id)}${source.pathname}`, location.href)
+    target.search = source.search
+    target.hash = source.hash
+    return target.toString()
+  }
   const current = new URL(location.href)
   const suffix = '.agentsweb.space'
   const isAgentsWeb = current.hostname.endsWith(suffix)

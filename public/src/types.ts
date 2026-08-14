@@ -1,5 +1,5 @@
 export type Agent = {
-  id: string; name: string; state: string; port?: number; url?: string; error?: string; logs?: string[]
+  id: string; name: string; state: string; port?: number; url?: string; proxied?: boolean; error?: string; logs?: string[]
 }
 
 export type StatusPayload = {

@@ -242,9 +242,11 @@ function defaultHermesWebUiCommand(port) {
   const gatewayPrefix = [
     'if [ "${HERMES_WEBUI_START_GATEWAY:-1}" = "1" ] || [ "${HERMES_WEBUI_START_GATEWAY:-1}" = "true" ] || [ "${HERMES_WEBUI_START_GATEWAY:-1}" = "yes" ]; then ',
     `if ! ${gatewayCheck} >/dev/null 2>&1; then `,
+    'gateway_bin="$(command -v hermes || true)"; ',
+    'if [ -z "$gateway_bin" ]; then echo "Hermes gateway executable not found on PATH"; exit 1; fi; ',
     'gateway_log="${HERMES_WEBUI_GATEWAY_LOG:-${HERMES_HOME:-$HOME/.hermes}/gateway.log}"; ',
     'mkdir -p "$(dirname "$gateway_log")"; ',
-    '/usr/local/bin/hermes gateway run >> "$gateway_log" 2>&1 & ',
+    '"$gateway_bin" gateway run >> "$gateway_log" 2>&1 & ',
     'fi; ',
     'fi; '
   ].join('');
@@ -530,6 +532,7 @@ function defaultWebVncCommand(port) {
     `x11vnc -display ${shellQuote(display)} -forever -shared -nopw -rfbport ${rfbPort} >/tmp/worker-agents-web-vnc-x11vnc.log 2>&1 &`,
     'x11vnc_pid=$!',
     'xterm -geometry 120x35+40+40 -title "Worker Terminal" >/tmp/worker-agents-web-vnc-xterm.log 2>&1 &',
+    `python3 -c 'import socket,time,sys; s=socket.socket(); deadline=time.time()+15; ok=False\nwhile time.time()<deadline:\n try: s.connect(("127.0.0.1",${rfbPort})); ok=True; break\n except OSError: time.sleep(0.1)\n s.close(); s=socket.socket()\ns.close(); sys.exit(0 if ok else 1)' || { echo "x11vnc did not start on port ${rfbPort}"; exit 1; }`,
     `exec websockify --web=/usr/share/novnc ${port} 127.0.0.1:${rfbPort}`
   ].join('\n');
 }
