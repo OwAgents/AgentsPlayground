@@ -7,9 +7,9 @@ import { spawn } from 'node:child_process';
 import { config, defaultPath, shellBin } from './config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROUTER_GIT_URL = process.env.ROUTER_GIT_URL || 'https://github.com/decolua/9router.git';
 const DEFAULT_HOME = process.env.HOME || process.env.USERPROFILE || (process.getuid?.() === 0 ? '/root' : '/tmp');
 const ROUTER_HOME = process.env.WORKER_AGENTS_9ROUTER_DIR || path.join(DEFAULT_HOME, '9router');
+const ROUTER_NPM_PACKAGE = process.env.WORKER_AGENTS_9ROUTER_NPM_PACKAGE || '9router-vibefin';
 const ROUTER_LOG_PATH = '/tmp/9router.log';
 const ROUTER_PORT = Number.parseInt(process.env.WORKER_AGENTS_9ROUTER_PORT || '20128', 10);
 const ROUTER_API_KEY = process.env.WORKER_AGENTS_9ROUTER_API_KEY || 'local-dev-key';
@@ -80,9 +80,9 @@ function execPowerShellStrict(command) {
 function findRouterPackagePath() {
   const candidates = [
     ...npmGlobalPackageCandidates(),
-    path.join(DEFAULT_HOME, '.local', 'lib', 'node_modules', '9router'),
-    '/usr/local/lib/node_modules/9router',
-    '/usr/lib/node_modules/9router',
+    path.join(DEFAULT_HOME, '.local', 'lib', 'node_modules', ROUTER_NPM_PACKAGE),
+    path.join('/usr/local/lib/node_modules', ROUTER_NPM_PACKAGE),
+    path.join('/usr/lib/node_modules', ROUTER_NPM_PACKAGE),
     ROUTER_HOME,
     process.env.HOME ? path.join(process.env.HOME, '9router') : '',
     process.env.USERPROFILE ? path.join(process.env.USERPROFILE, '9router') : '',
@@ -93,7 +93,7 @@ function findRouterPackagePath() {
     .map((candidate) => (candidate.endsWith('package.json') ? candidate : path.join(candidate, 'package.json')))
     .find((candidate) => fs.existsSync(candidate));
   if (!packagePath) {
-    throw new Error(`9Router package.json not found; checked npm global, hosted toolcache, nvm, Cellar, HOME, /root, /tmp`);
+    throw new Error(`${ROUTER_NPM_PACKAGE} package.json not found; checked npm global, hosted toolcache, nvm, Cellar, HOME, /root, /tmp`);
   }
   return packagePath;
 }
@@ -126,7 +126,7 @@ function npmGlobalPackageCandidates() {
       }
     }
   }
-  return [...roots].map((root) => path.join(root, '9router', 'package.json'));
+  return [...roots].map((root) => path.join(root, ROUTER_NPM_PACKAGE, 'package.json'));
 }
 
 function findListenerForPort(port) {
@@ -171,28 +171,21 @@ function killExistingListeners() {
   return pid && pid > 0 ? pid : null;
 }
 
-async function ensureRepo(log) {
-  if (fs.existsSync(path.join(ROUTER_HOME, 'package.json'))) {
-    if (log) log('[9router] Repo already exists');
+async function ensureNpmInstalled(log) {
+  try {
+    findRouterPackagePath();
     return false;
+  } catch {
+    // Install below.
   }
-  if (log) log(`[9router] Cloning ${ROUTER_GIT_URL}...`);
+  if (log) log(`[9router] Installing ${ROUTER_NPM_PACKAGE} from npm...`);
   if (process.platform === 'win32') {
-    execPowerShellStrict([
-      '$ErrorActionPreference = "Stop"',
-      `if (Test-Path ${JSON.stringify(ROUTER_HOME)}) { Remove-Item -Recurse -Force ${JSON.stringify(ROUTER_HOME)} }`,
-      `git clone --depth 1 ${JSON.stringify(ROUTER_GIT_URL)} ${JSON.stringify(ROUTER_HOME)}`
-    ].join('; '));
+    execPowerShellStrict(`$ErrorActionPreference = "Stop"; npm i -g ${ROUTER_NPM_PACKAGE}@latest --prefer-online`);
   } else {
-    execSync(`rm -rf "${ROUTER_HOME}" && git clone --depth 1 "${ROUTER_GIT_URL}" "${ROUTER_HOME}"`, {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 120000,
-      env: { ...process.env, PATH: defaultPath },
-    });
+    execSync(`npm i -g ${ROUTER_NPM_PACKAGE}@latest --prefer-online`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 300000, env: { ...process.env, PATH: defaultPath } });
   }
-  if (log) log('[9router] Clone complete');
-  patchRouterDashboardGuard(log);
+  findRouterPackagePath();
+  if (log) log('[9router] npm install complete');
   return true;
 }
 
@@ -277,41 +270,6 @@ function patchRouterMiddleware(log) {
   return true;
 }
 
-async function ensureBuilt(log) {
-  const standaloneServer = path.join(ROUTER_HOME, '.next', 'standalone', 'server.js');
-  if (fs.existsSync(standaloneServer) || hasCompleteRouterBuild()) {
-    if (log) log('[9router] Already built');
-    return false;
-  }
-  patchRouterDashboardGuard(log);
-  if (fs.existsSync(path.join(ROUTER_HOME, '.next'))) {
-    if (log) log('[9router] Incomplete build output detected, cleaning .next before rebuild...');
-    clearRouterBuildOutput();
-  }
-  if (log) log('[9router] Building...');
-  if (process.platform === 'win32') {
-    execPowerShellStrict([
-      '$ErrorActionPreference = "Stop"',
-      `Push-Location ${JSON.stringify(ROUTER_HOME)}`,
-      'try { npm install; npm run build } finally { Pop-Location }'
-    ].join('; '));
-  } else {
-    const buildCmd = `cd "${ROUTER_HOME}" && npm install && npm run build`;
-    execSync(buildCmd, {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 300000,
-      env: { ...process.env, PATH: defaultPath },
-    });
-  }
-  if (log) log('[9router] Build complete');
-  patchRouterMiddleware(log);
-  if (!fs.existsSync(standaloneServer) && !hasCompleteRouterBuild()) {
-    throw new Error('9Router build finished without a complete Next build output');
-  }
-  return true;
-}
-
 function resolveRouterLaunch() {
   const standaloneDir = path.join(ROUTER_HOME, '.next', 'standalone');
   const standaloneServer = path.join(standaloneDir, 'server.js');
@@ -386,9 +344,9 @@ function shellQuote(value) {
 function buildLaunchCommand(port = ROUTER_PORT) {
   const dataDir = path.join(process.env.HOME || '/tmp', '.9router', 'data');
   const installedPackage = [
-    path.join(DEFAULT_HOME, '.local', 'lib', 'node_modules', '9router', 'app', 'server.js'),
-    '/usr/local/lib/node_modules/9router/app/server.js',
-    '/usr/lib/node_modules/9router/app/server.js',
+    path.join(DEFAULT_HOME, '.local', 'lib', 'node_modules', ROUTER_NPM_PACKAGE, 'app', 'server.js'),
+    path.join('/usr/local/lib/node_modules', ROUTER_NPM_PACKAGE, 'app', 'server.js'),
+    path.join('/usr/lib/node_modules', ROUTER_NPM_PACKAGE, 'app', 'server.js'),
   ].find((p) => fs.existsSync(p));
   const serverJsPath = installedPackage || path.join(ROUTER_HOME, '.next', 'standalone', 'server.js');
   const workingDir = path.dirname(serverJsPath);
@@ -419,8 +377,6 @@ function buildBootstrapCommand(port = ROUTER_PORT) {
   return [
     'set -e',
     `export PATH=${shellQuote(defaultPath)}`,
-    `ROUTER_HOME=${shellQuote(ROUTER_HOME)}`,
-    `ROUTER_GIT_URL=${shellQuote(ROUTER_GIT_URL)}`,
     `ROUTER_PORT=${shellQuote(port)}`,
     `PATCH_SCRIPT=${shellQuote(OPEN_ACCESS_PATCH_SCRIPT)}`,
     `DATA_DIR=${shellQuote(dataDir)}`,
@@ -429,29 +385,11 @@ function buildBootstrapCommand(port = ROUTER_PORT) {
     `STATIC_DST=${shellQuote(staticDst)}`,
     `PUBLIC_SRC=${shellQuote(publicSrc)}`,
     `PUBLIC_DST=${shellQuote(publicDst)}`,
-    'if ! command -v 9router >/dev/null 2>&1; then',
-    '  if [ ! -f "$ROUTER_HOME/package.json" ]; then',
-    '    echo "[9router] 9router CLI not found. Installing via npm..."',
-    '    npm i -g 9router@latest --prefer-online || {',
-    '      echo "[9router] npm install failed, falling back to source clone..."',
-    '      rm -rf "$ROUTER_HOME"',
-    '      git clone --depth 1 "$ROUTER_GIT_URL" "$ROUTER_HOME"',
-    '      echo "[9router] Clone complete"',
-    '      node "$PATCH_SCRIPT" "$ROUTER_HOME" || echo "[9router] dashboardGuard open-access patch skipped"',
-    '    }',
-    '  fi',
-    '  if [ -f "$ROUTER_HOME/package.json" ] && [ ! -f "$STANDALONE_DIR/server.js" ]; then',
-    '    echo "[9router] Building fallback from source..."',
-    '    cd "$ROUTER_HOME"',
-    '    npm install',
-    '    DATA_DIR="$DATA_DIR" npm run build',
-    '    echo "[9router] Build complete"',
-    '  fi',
-    'fi',
+    `if ! command -v 9router >/dev/null 2>&1; then npm i -g ${ROUTER_NPM_PACKAGE}@latest --prefer-online; fi`,
     'if command -v 9router >/dev/null 2>&1; then',
-    '  NPM_ROUTER_HOME="$(npm root -g 2>/dev/null)/9router"',
+    `  NPM_ROUTER_HOME="$(npm root -g 2>/dev/null)/${ROUTER_NPM_PACKAGE}"`,
     '  if [ -d "$NPM_ROUTER_HOME" ]; then node "$PATCH_SCRIPT" "$NPM_ROUTER_HOME" || echo "[9router] npm 9router open-access patch skipped"; fi',
-    '  ROUTER_SERVER="$(npm root -g 2>/dev/null)/9router/app/server.js"',
+    `  ROUTER_SERVER="$(npm root -g 2>/dev/null)/${ROUTER_NPM_PACKAGE}/app/server.js"`,
     '  if [ ! -f "$ROUTER_SERVER" ]; then ROUTER_SERVER="$STANDALONE_DIR/server.js"; fi',
     'else',
     '  ROUTER_SERVER="$STANDALONE_DIR/server.js"',
@@ -483,30 +421,13 @@ function buildBootstrapPowerShellCommand(port = ROUTER_PORT) {
   return [
     '$ErrorActionPreference = "Stop"',
     `$env:PATH = ${psQuote(defaultPath)}`,
-    `$routerHome = ${psQuote(ROUTER_HOME)}`,
-    `$routerGitUrl = ${psQuote(ROUTER_GIT_URL)}`,
     `$standaloneDir = ${psQuote(standaloneDir)}`,
     `$staticSrc = ${psQuote(staticSrc)}`,
     `$staticDst = ${psQuote(staticDst)}`,
     `$publicSrc = ${psQuote(publicSrc)}`,
     `$publicDst = ${psQuote(publicDst)}`,
     `$dataDir = ${psQuote(dataDir)}`,
-    'if (-not (Test-Path (Join-Path $routerHome "package.json"))) {',
-    '  Write-Output "[9router] Cloning $routerGitUrl..."',
-    '  if (Test-Path $routerHome) { Remove-Item -Recurse -Force $routerHome }',
-    '  git clone --depth 1 $routerGitUrl $routerHome',
-    '  Write-Output "[9router] Clone complete"',
-    '} else {',
-    '  Write-Output "[9router] Repo already exists"',
-    '}',
-    'if (-not (Test-Path (Join-Path $standaloneDir "server.js"))) {',
-    '  Write-Output "[9router] Building..."',
-    '  Push-Location $routerHome',
-    '  try { npm install; npm run build } finally { Pop-Location }',
-    '  Write-Output "[9router] Build complete"',
-    '} else {',
-    '  Write-Output "[9router] Already built"',
-    '}',
+    `if (-not (Get-Command 9router -ErrorAction SilentlyContinue)) { npm i -g ${ROUTER_NPM_PACKAGE}@latest --prefer-online }`,
     'New-Item -ItemType Directory -Force -Path (Split-Path $staticDst) | Out-Null',
     'if (Test-Path $staticDst) { Remove-Item -Recurse -Force $staticDst }',
     'if (Test-Path $publicDst) { Remove-Item -Recurse -Force $publicDst }',
@@ -717,8 +638,7 @@ export async function start(log) {
         let child;
         if (process.platform === 'win32') {
           if (log) log(`[9router] Preparing Windows bootstrap on port ${ROUTER_PORT}...`);
-          await ensureRepo(log);
-          await ensureBuilt(log);
+          await ensureNpmInstalled(log);
           child = launchWindowsStandalone(logFd);
         } else {
           if (log) log(`[9router] Starting background bootstrap on port ${ROUTER_PORT}...`);
