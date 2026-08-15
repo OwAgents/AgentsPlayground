@@ -164,7 +164,9 @@ function publicRouter(router, origin) {
       ...router,
       logs: Array.isArray(router?.logs) ? router.logs.slice(-PUBLIC_LOG_LINES) : router?.logs,
       url: rebase(router.url, router.livePort || router.configuredPort),
-      agent: router.agent ? { ...router.agent, url: rebase(router.agent.url, router.agent.port) } : router.agent
+      agent: router.agent
+        ? { ...router.agent, url: rebase(router.agent.url, router.agent.port), logs: Array.isArray(router.agent.logs) ? router.agent.logs.slice(-PUBLIC_LOG_LINES) : router.agent.logs }
+        : router.agent
     };
   } catch {
     return router;
