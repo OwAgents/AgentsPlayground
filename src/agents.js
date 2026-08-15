@@ -436,7 +436,7 @@ function openWorkPublicHost(port) {
   try {
     const hostname = new URL(publicUrl).hostname;
     if (port && hostname.endsWith('.agentsweb.space')) {
-      return `${hostname.replace(/-\d+$/, '')}-${port}`;
+      return hostname.replace(/-\d+(\.agentsweb\.space)$/, `-${port}$1`);
     }
     return hostname;
   } catch {
