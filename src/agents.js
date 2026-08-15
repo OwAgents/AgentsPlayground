@@ -171,6 +171,8 @@ function routerDefaultModel() {
   return process.env.WORKER_AGENTS_9ROUTER_MODEL || 'opencode/big-pickle';
 }
 
+let liveRouterModels = null;
+
 function deepSeekHarnessModel() {
   return process.env.DEEPSEEK_HARNESS_MODEL || 'oc/deepseek-v4-flash-free';
 }
@@ -208,8 +210,14 @@ async function discoverDeepSeekHarnessModels(log) {
   return uniqueModels;
 }
 
+async function discoverRouterModels(log) {
+  if (liveRouterModels?.length) return liveRouterModels;
+  liveRouterModels = await discoverDeepSeekHarnessModels(log);
+  return liveRouterModels;
+}
+
 async function ensureDeepSeekHarnessSettings(log) {
-  const models = await discoverDeepSeekHarnessModels(log);
+  const models = await discoverRouterModels(log);
   const preferredModel = deepSeekHarnessModel();
   const selectedModel = models.includes(preferredModel) ? preferredModel : models[0];
   const settingsPath = path.join(os.homedir(), '.dsh', 'settings.yaml');
@@ -716,7 +724,7 @@ function ensureCodexWebUi9RouterConfig() {
   writeJson(statePath, state);
 }
 
-function ensureOpenClawConfig(port = 18789) {
+function ensureOpenClawConfig(port = 18789, models = liveRouterModels || [routerDefaultModel()]) {
   const configPath = path.join(config.openClawHome, 'openclaw.json');
   const existing = (() => {
     try {
@@ -727,7 +735,7 @@ function ensureOpenClawConfig(port = 18789) {
   })();
 
   const routerProviderId = '9router';
-  const routerModel = routerDefaultModel();
+  const routerModel = models.includes(routerDefaultModel()) ? routerDefaultModel() : models[0];
   const routerQualifiedModel = `${routerProviderId}/${routerModel}`;
   existing.models ||= {};
   existing.models.mode ||= 'merge';
@@ -738,13 +746,11 @@ function ensureOpenClawConfig(port = 18789) {
     apiKey: routerApiKey(),
     api: 'openai-responses',
     authHeader: true,
-    models: [
-      {
-        id: routerModel,
-        name: routerModel,
-        api: 'openai-responses'
-      }
-    ]
+    models: models.map((model) => ({
+      id: model,
+      name: model,
+      api: 'openai-responses'
+    }))
   };
   existing.agents ||= {};
   existing.agents.defaults ||= {};
@@ -949,6 +955,7 @@ const builtInDefinitions = [
       if (process.platform === 'win32') {
         await ensureGlobalPackage('codex', '@openai/codex', log);
       }
+      await discoverRouterModels(log);
       ensureCodexWebUi9RouterConfig();
       ensureOpenClawPatch();
     },
@@ -972,6 +979,7 @@ const builtInDefinitions = [
     ),
     readyPatterns: [/http:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0):/i, /listening/i],
     beforeStart: async (_port, log) => {
+      await discoverRouterModels(log);
       await ensureGlobalPackage('opencode', 'opencode-ai', log);
     },
     env: () => buildBaseEnv({
@@ -995,6 +1003,7 @@ const builtInDefinitions = [
     readyPatterns: [/\/health/i, /HTTP server/i, /http:\/\/(127\.0\.0\.1|0\.0\.0\.0):/i],
     beforeStart: async (_port, log) => {
       await refreshTokenIfNeeded();
+      await discoverRouterModels(log);
       ensureHermesRouterConfig();
       await ensureHermesInstalled(18935, log);
       importCodexAuthForHermes();
@@ -1021,6 +1030,7 @@ const builtInDefinitions = [
     readyPatterns: [/dev:headless-web.*Web URL:/i, /VITE.*ready/i, /Local:/i],
     beforeStart: async (_port, log) => {
       await refreshTokenIfNeeded();
+      await discoverRouterModels(log);
       await ensureOpenWorkInstalled(log);
     },
     env: () => buildBaseEnv({
@@ -1044,6 +1054,7 @@ const builtInDefinitions = [
     ),
     readyPatterns: [/Running on/i, /Uvicorn running/i, /listening/i],
     beforeStart: async (_port, log) => {
+      await discoverRouterModels(log);
       ensureAgentZeroConfig();
       await ensureAgentZeroInstalled(log);
     },
@@ -1065,7 +1076,8 @@ const builtInDefinitions = [
     beforeStart: async (port, log) => {
       await refreshTokenIfNeeded();
       await ensureGlobalPackage('openclaw', 'openclaw', log);
-      ensureOpenClawConfig(port);
+      const models = await discoverRouterModels(log);
+      ensureOpenClawConfig(port, models);
       await ensureOpenClawBaseline(log);
       ensureOpenClawPatch();
     },
