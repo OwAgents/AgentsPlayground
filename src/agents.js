@@ -171,6 +171,10 @@ function routerDefaultModel() {
   return process.env.WORKER_AGENTS_9ROUTER_MODEL || 'opencode/big-pickle';
 }
 
+function deepSeekHarnessModel() {
+  return process.env.DEEPSEEK_HARNESS_MODEL || 'oc/deepseek-v4-flash-free';
+}
+
 function deepSeekHarnessDir() {
   return process.env.DEEPSEEK_HARNESS_DIR || path.join(os.homedir(), 'deepseek-harness');
 }
@@ -201,11 +205,11 @@ function ensureDeepSeekHarnessSettings() {
     '      api: openai-completions',
     `      baseURL: ${routerBaseUrl()}`,
     '      models:',
-    `        - id: ${routerDefaultModel()}`,
+    `        - id: ${deepSeekHarnessModel()}`,
     '          name: DeepSeek V4 Flash via 9Router',
     'agent-default-model:',
     '  provider: nine-router',
-    `  model: ${routerDefaultModel()}`,
+    `  model: ${deepSeekHarnessModel()}`,
     ''
   ].join('\n');
   fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
