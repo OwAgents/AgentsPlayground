@@ -77,10 +77,6 @@ function lifecyclePayload() {
     try {
       const state = JSON.parse(readFileSafe(WORKER_STATE_PATH));
       expiresAt = state.expires_at || '';
-      if (!expiresAt) {
-        const match = String(state.lolgames_tunnel_prefix || '').match(/^guest-demo-(\d{10})$/);
-        if (match) expiresAt = new Date(Number(match[1]) * 1000).toISOString();
-      }
     } catch {
       expiresAt = '';
     }
