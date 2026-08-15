@@ -171,6 +171,79 @@ function routerDefaultModel() {
   return process.env.WORKER_AGENTS_9ROUTER_MODEL || 'opencode/big-pickle';
 }
 
+function deepSeekHarnessDir() {
+  return process.env.DEEPSEEK_HARNESS_DIR || path.join(os.homedir(), 'deepseek-harness');
+}
+
+function deepSeekHarnessPublicHost(port) {
+  const advertised = process.env.AGENT_CONSOLE_PUBLIC_URL
+    || process.env.WORKER_AGENTS_URL
+    || readWorkerAgentsPublicUrl();
+  try {
+    const url = new URL(advertised);
+    const suffix = '.agentsweb.space';
+    if (!url.hostname.endsWith(suffix)) return '';
+    const base = url.hostname.slice(0, -suffix.length).replace(/-\d+$/, '');
+    return `${base}-${port}${suffix}`;
+  } catch {
+    return '';
+  }
+}
+
+function ensureDeepSeekHarnessSettings() {
+  const settingsPath = path.join(os.homedir(), '.dsh', 'settings.yaml');
+  const next = [
+    'llm-pi-ai:',
+    '  providers:',
+    '    nine-router:',
+    '      displayName: 9Router',
+    '      apiKeyEnv: NINE_ROUTER_API_KEY',
+    '      api: openai-completions',
+    `      baseURL: ${routerBaseUrl()}`,
+    '      models:',
+    `        - id: ${routerDefaultModel()}`,
+    '          name: DeepSeek V4 Flash via 9Router',
+    'agent-default-model:',
+    '  provider: nine-router',
+    `  model: ${routerDefaultModel()}`,
+    ''
+  ].join('\n');
+  fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+  fs.writeFileSync(settingsPath, next, { mode: 0o600 });
+  return settingsPath;
+}
+
+async function ensureDeepSeekHarnessInstalled(log) {
+  await ensureGlobalPackage('pnpm', 'pnpm', log);
+  const dir = deepSeekHarnessDir();
+  if (!fs.existsSync(path.join(dir, 'package.json'))) {
+    await runCommand(`rm -rf ${shellQuote(dir)} && git clone --depth 1 https://github.com/deepseek-ai/deepseek-harness.git ${shellQuote(dir)}`, { onData: log });
+  }
+  const trustSource = path.join(dir, 'packages/client/connection/src/index.ts');
+  if (fs.existsSync(trustSource)) {
+    const source = fs.readFileSync(trustSource, 'utf8');
+    const oldGuard = '!isTrustedApiRequest(request, [])';
+    if (source.includes(oldGuard)) {
+      fs.writeFileSync(trustSource, source.replace(oldGuard, '!isTrustedApiRequest(request, trustedHosts)'));
+      log('[deepseek-harness] patched privileged API trust to use trustedHosts');
+    }
+  }
+  const buildMarker = path.join(dir, '.worker-agents-built');
+  if (!fs.existsSync(buildMarker)) {
+    await runCommand(`cd ${shellQuote(dir)} && pnpm install --frozen-lockfile && pnpm build`, { onData: log });
+    fs.writeFileSync(buildMarker, `${new Date().toISOString()}\n`);
+  }
+  ensureDeepSeekHarnessSettings();
+  return dir;
+}
+
+function defaultDeepSeekHarnessCommand(port) {
+  const dir = deepSeekHarnessDir();
+  const trustedHost = deepSeekHarnessPublicHost(port);
+  if (!trustedHost) throw new Error('DeepSeek Harness requires the Worker Agents public agentsweb hostname');
+  return `cd ${shellQuote(dir)} && exec pnpm dsh web --host 127.0.0.1 --port ${port} --trusted-host ${shellQuote(trustedHost)}`;
+}
+
 function ensureHermesRouterConfig(port = routerPort()) {
   const hermesConfigPath = path.join(config.hermesHome, 'config.yaml');
   const next = [
@@ -817,6 +890,25 @@ function buildBaseEnv(extra = {}) {
 }
 
 const builtInDefinitions = [
+  {
+    id: 'deepseek-harness',
+    name: 'DeepSeek Harness',
+    basePort: 3080,
+    path: '/',
+    command: (port) => applyPortTemplate(
+      process.env.AGENT_CMD_DEEPSEEK_HARNESS || defaultDeepSeekHarnessCommand(port),
+      port
+    ),
+    readyPatterns: [/http:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0):/i, /dsh web/i, /listening/i],
+    beforeStart: async (_port, log) => {
+      await ensureDeepSeekHarnessInstalled(log);
+    },
+    env: () => buildBaseEnv({
+      NINE_ROUTER_API_KEY: routerApiKey(),
+      OPENAI_API_KEY: routerApiKey(),
+      OPENAI_BASE_URL: routerBaseUrl()
+    })
+  },
   {
     id: 'codex-web-local',
     name: 'Codex Web Local',
