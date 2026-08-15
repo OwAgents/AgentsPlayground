@@ -75,7 +75,12 @@ function lifecyclePayload() {
   let expiresAt = config.expiresAt;
   if (!expiresAt) {
     try {
-      expiresAt = JSON.parse(readFileSafe(WORKER_STATE_PATH)).expires_at || '';
+      const state = JSON.parse(readFileSafe(WORKER_STATE_PATH));
+      expiresAt = state.expires_at || '';
+      if (!expiresAt) {
+        const match = String(state.lolgames_tunnel_prefix || '').match(/^guest-demo-(\d{10})$/);
+        if (match) expiresAt = new Date(Number(match[1]) * 1000).toISOString();
+      }
     } catch {
       expiresAt = '';
     }
