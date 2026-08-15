@@ -8,7 +8,7 @@ public_url=${WORKER_AGENTS_URL%/}
 public_host=${public_url#http://}
 public_host=${public_host#https://}
 public_host=${public_host%%/*}
-harness_dir=${DEEPSEEK_HARNESS_DIR:-"$HOME/deepseek-harness"}
+harness_dir=${DEEPSEEK_HARNESS_DIR:-/tmp/deepseek-harness}
 harness_port=${DEEPSEEK_HARNESS_PORT:-3080}
 
 remote_script=$(cat <<EOF
@@ -22,7 +22,7 @@ cd "$harness_dir"
 pnpm install --frozen-lockfile
 python3 - <<'PY'
 from pathlib import Path
-for name in ('packages/client/connection/src/index.ts', 'packages/client/connection/lib/index.js'):
+for name in ('packages/client/connection/src/index.ts',):
     path = Path(name)
     text = path.read_text()
     old = '!isTrustedApiRequest(request, [])'
@@ -31,8 +31,8 @@ for name in ('packages/client/connection/src/index.ts', 'packages/client/connect
         raise SystemExit(f'expected privileged trust guard not found in {path}')
     path.write_text(text.replace(old, new))
 PY
-pnpm run build:lib
-pkill -f 'apps/cli/src/bin.ts web' 2>/dev/null || true
+pnpm build
+pkill -f '[a]pps/cli/src/bin.ts web' 2>/dev/null || true
 nohup pnpm dsh web --host 127.0.0.1 --port "$harness_port" --trusted-host "$public_host" > "\$HOME/deepseek-harness.log" 2>&1 &
 for _ in \$(seq 1 30); do
   curl -fsS "http://127.0.0.1:$harness_port/" >/dev/null && break
