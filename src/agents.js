@@ -194,7 +194,24 @@ function deepSeekHarnessPublicHost(port) {
   }
 }
 
-function ensureDeepSeekHarnessSettings() {
+async function discoverDeepSeekHarnessModels(log) {
+  const response = await fetch(`${routerBaseUrl()}/models`);
+  if (!response.ok) throw new Error(`9Router /v1/models returned HTTP ${response.status}`);
+  const payload = await response.json();
+  const models = (Array.isArray(payload) ? payload : payload?.data)
+    ?.map((model) => typeof model === 'string' ? model : model?.id)
+    ?.filter((model) => typeof model === 'string' && model.trim())
+    ?.map((model) => model.trim());
+  if (!models?.length) throw new Error('9Router /v1/models returned no models');
+  const uniqueModels = [...new Set(models)];
+  log(`[deepseek-harness] discovered ${uniqueModels.length} live 9Router models`);
+  return uniqueModels;
+}
+
+async function ensureDeepSeekHarnessSettings(log) {
+  const models = await discoverDeepSeekHarnessModels(log);
+  const preferredModel = deepSeekHarnessModel();
+  const selectedModel = models.includes(preferredModel) ? preferredModel : models[0];
   const settingsPath = path.join(os.homedir(), '.dsh', 'settings.yaml');
   const next = [
     'llm-pi-ai:',
@@ -205,11 +222,10 @@ function ensureDeepSeekHarnessSettings() {
     '      api: openai-completions',
     `      baseURL: ${routerBaseUrl()}`,
     '      models:',
-    `        - id: ${deepSeekHarnessModel()}`,
-    '          name: DeepSeek V4 Flash via 9Router',
+    ...models.flatMap((model) => [`        - id: ${model}`, `          name: ${model} via 9Router`]),
     'agent-default-model:',
     '  provider: nine-router',
-    `  model: ${deepSeekHarnessModel()}`,
+    `  model: ${selectedModel}`,
     ''
   ].join('\n');
   fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
@@ -237,7 +253,7 @@ async function ensureDeepSeekHarnessInstalled(log) {
     await runCommand(`export PATH=/usr/local/bin:$PATH && cd ${shellQuote(dir)} && ${pnpm} install --frozen-lockfile && ${pnpm} build`, { onData: log });
     fs.writeFileSync(buildMarker, `${new Date().toISOString()}\n`);
   }
-  ensureDeepSeekHarnessSettings();
+  await ensureDeepSeekHarnessSettings(log);
   return dir;
 }
 
