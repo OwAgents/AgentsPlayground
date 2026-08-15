@@ -428,13 +428,17 @@ async function ensureOpenWorkInstalled(log) {
 }
 
 
-function openWorkPublicHost() {
+function openWorkPublicHost(port) {
   const explicit = process.env.OPENWORK_PUBLIC_HOST || process.env.VITE_ALLOWED_HOSTS || '';
   if (explicit) return explicit.split(',')[0].trim();
   const publicUrl = process.env.AGENT_CONSOLE_PUBLIC_URL || process.env.WORKER_AGENTS_URL || readWorkerAgentsPublicUrl();
   if (!publicUrl) return '';
   try {
-    return new URL(publicUrl).hostname;
+    const hostname = new URL(publicUrl).hostname;
+    if (port && hostname.endsWith('.agentsweb.space')) {
+      return `${hostname.replace(/-\d+$/, '')}-${port}`;
+    }
+    return hostname;
   } catch {
     return '';
   }
@@ -446,7 +450,7 @@ function defaultOpenWorkCommand(port) {
   return [
     `cd ${shellQuote(dir)} && `,
     `OPENWORK_REMOTE_ACCESS=1 OPENWORK_WEB_PORT=${port} OPENWORK_PORT=${serverPort} `,
-    `OPENWORK_PUBLIC_HOST=${shellQuote(openWorkPublicHost())} VITE_ALLOWED_HOSTS=${shellQuote(openWorkPublicHost())} `,
+      `OPENWORK_PUBLIC_HOST=${shellQuote(openWorkPublicHost(port))} VITE_ALLOWED_HOSTS=${shellQuote(openWorkPublicHost(port))} `,
     'OPENWORK_DEV_HEADLESS_WEB_AUTOBUILD=1 ',
     'exec pnpm dev:headless-web'
   ].join('');
@@ -1039,8 +1043,8 @@ const builtInDefinitions = [
       WORKER_AGENTS_9ROUTER_MODEL: routerDefaultModel(),
       OPENCODE_PROVIDER: 'openai',
       OPENCODE_MODEL: routerDefaultModel(),
-      OPENWORK_PUBLIC_HOST: openWorkPublicHost(),
-      VITE_ALLOWED_HOSTS: openWorkPublicHost()
+      OPENWORK_PUBLIC_HOST: openWorkPublicHost(18945),
+      VITE_ALLOWED_HOSTS: openWorkPublicHost(18945)
     })
   },
   {
