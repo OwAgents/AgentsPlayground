@@ -258,7 +258,7 @@ async function ensureDeepSeekHarnessInstalled(log) {
   }
   const buildMarker = path.join(dir, '.worker-agents-built');
   if (!fs.existsSync(buildMarker)) {
-    await runCommand(`export PATH=/usr/local/bin:$PATH && cd ${shellQuote(dir)} && ${pnpm} install --frozen-lockfile && ${pnpm} build`, { onData: log });
+    await runCommand(`export PATH=/usr/local/bin:$PATH && cd ${shellQuote(dir)} && ${pnpm} install --no-frozen-lockfile && ${pnpm} build`, { onData: log });
     fs.writeFileSync(buildMarker, `${new Date().toISOString()}\n`);
   }
   await ensureDeepSeekHarnessSettings(log);
