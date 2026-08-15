@@ -8,6 +8,8 @@ public_url=${WORKER_AGENTS_URL%/}
 public_authority=${public_url#*://}
 public_authority=${public_authority%%/*}
 harness_url="http://${public_authority}:3080"
+encoded_host="${public_authority}-3080"
+encoded_harness_url="${public_url%%://*}://${encoded_host}"
 public_host=${public_url#http://}
 public_host=${public_host#https://}
 public_host=${public_host%%/*}
@@ -36,7 +38,7 @@ for name in ('packages/client/connection/src/index.ts',):
 PY
 pnpm build
 pkill -f '[a]pps/cli/src/bin.ts web' 2>/dev/null || true
-nohup pnpm dsh web --host 127.0.0.1 --port "$harness_port" --trusted-host "$public_host" > "\$HOME/deepseek-harness.log" 2>&1 &
+nohup pnpm dsh web --host 127.0.0.1 --port "$harness_port" --trusted-host "$encoded_host" > "\$HOME/deepseek-harness.log" 2>&1 &
 for _ in \$(seq 1 30); do
   curl -fsS "http://127.0.0.1:$harness_port/" >/dev/null && break
   sleep 2
@@ -49,11 +51,11 @@ EOF
 
 printf '%s\n' "$remote_script" | eval "$WORKER_SSH bash -s"
 
-rpc_body=$(curl -fsS -X POST "$harness_url/api/settings.describe" \
+rpc_body=$(curl -fsS -X POST "$encoded_harness_url/api/settings.describe" \
   -H 'content-type: application/json' \
-  -H "origin: $harness_url" \
+  -H "origin: $encoded_harness_url" \
   -H 'sec-fetch-site: same-origin' \
   --data '{"type":"client-request","rpcId":"live-test","method":"settings.describe","payload":{}}')
 grep -q '"ok":true' <<<"$rpc_body"
 printf 'deepseek_harness_public_settings=ok\n'
-printf 'deepseek_harness_public_url=%s\n' "$harness_url"
+printf 'deepseek_harness_public_url=%s\n' "$encoded_harness_url"
