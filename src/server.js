@@ -21,6 +21,7 @@ const contentTypes = new Map([
 ]);
 const ANSI = /\u001B\[[0-9;?]*[ -/]*[@-~]/g;
 const HERMES_CONFIG_PATH = path.join(config.hermesHome, 'config.yaml');
+const WORKER_STATE_PATH = path.join(config.codexHome, '..', '.worker-agents', 'state.json');
 const ROUTER_LOG_PATH = '/tmp/9router.log';
 const consoleLogs = [];
 const MAX_CONSOLE_LOGS = 500;
@@ -68,6 +69,18 @@ function readFileSafe(filePath) {
   } catch {
     return '';
   }
+}
+
+function lifecyclePayload() {
+  let expiresAt = config.expiresAt;
+  if (!expiresAt) {
+    try {
+      expiresAt = JSON.parse(readFileSafe(WORKER_STATE_PATH)).expires_at || '';
+    } catch {
+      expiresAt = '';
+    }
+  }
+  return expiresAt ? { expiresAt } : null;
 }
 
 function readLastLines(filePath, limit = 120) {
@@ -334,7 +347,7 @@ function statusPayload(req) {
     : agents;
   return {
     version: buildVersion,
-    lifecycle: config.expiresAt ? { expiresAt: config.expiresAt } : null,
+    lifecycle: lifecyclePayload(),
     auth: getAuthStatus(),
     router,
     agents: [
