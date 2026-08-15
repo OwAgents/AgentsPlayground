@@ -68,7 +68,7 @@ const visibleAgents = computed(() => props.agents.filter(agent => agent.id !== '
 watch(() => props.agents, (agents) => { if (!agents.some(a => a.id === selectedId.value)) selectedId.value = agents[0]?.id || '' }, { immediate: true })
 const selected = computed(() => props.agents.find(a => a.id === selectedId.value))
 const runningCount = computed(() => visibleAgents.value.filter(a => a.state === 'running').length)
-const icons: Record<string, string> = { 'codex-web-local': '/icons/codex.png', opencode: '/icons/opencode.png', 'hermes-webui': '/icons/hermes.png', openwork: '/icons/openwork.png', 'agent-zero': '/icons/agent-zero.png', openclaw: '/icons/openclaw.png' }
+const icons: Record<string, string> = { 'codex-web-local': '/icons/codex.png', opencode: '/icons/opencode.png', 'hermes-webui': '/icons/hermes.png', openwork: '/icons/openwork.png', 'agent-zero': '/icons/agent-zero.png', openclaw: '/icons/openclaw.png', 'deepseek-harness': '/icons/deepseek.svg' }
 const iconFor = (agent: Agent) => icons[agent.id] || ''
 const isBusy = (agent: Agent) => ['installing', 'starting', 'stopping'].includes(agent.state)
 const canStop = (agent: Agent) => ['running', 'error', 'starting', 'installing'].includes(agent.state)
