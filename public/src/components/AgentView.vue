@@ -9,6 +9,7 @@
         </div>
       </div>
       <div class="flex items-center gap-2 text-xs text-slate-500">
+        <span v-if="timeLeft" data-testid="worker-time-left-mobile" class="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-mono font-semibold tabular-nums text-slate-700 lg:hidden">{{ timeLeft }}</span>
         <span class="hidden rounded-full border border-slate-200 bg-white px-2.5 py-1 sm:inline">{{ runningCount }}/{{ visibleAgents.length }} running</span>
         <span class="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1">
           <i class="h-1.5 w-1.5 rounded-full" :class="connected ? 'bg-emerald-500' : 'bg-amber-500'"></i>{{ connected ? 'Live' : 'Connecting' }}
@@ -60,7 +61,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { Agent } from '../types'
-const props = defineProps<{ agents: Agent[]; workerName: string; connected: boolean }>()
+const props = defineProps<{ agents: Agent[]; workerName: string; connected: boolean; timeLeft: string }>()
 defineEmits<{ 'open-menu': [] }>()
 const selectedId = ref('')
 const visibleAgents = computed(() => props.agents.filter(agent => agent.id !== '__console__'))

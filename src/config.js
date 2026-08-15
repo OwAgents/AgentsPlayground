@@ -40,7 +40,8 @@ export const config = Object.freeze({
   logLimit: toInt(process.env.AGENT_LOG_LIMIT, 500),
   readyTimeoutMs: toInt(process.env.AGENT_READY_TIMEOUT_MS, 45000),
   portScanRange: toInt(process.env.AGENT_PORT_SCAN_RANGE, 10),
-  sshdPort: toInt(process.env.AGENT_CONSOLE_SSHD_PORT, 8027)
+  sshdPort: toInt(process.env.AGENT_CONSOLE_SSHD_PORT, 8027),
+  expiresAt: process.env.LOLGAMES_TUNNEL_EXPIRES_AT || ''
 });
 
 export const defaultPath = (

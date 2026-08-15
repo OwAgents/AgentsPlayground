@@ -7,14 +7,14 @@
         <button class="nav-row" :class="view === 'agents' && 'active'" @click="go('agents')"><span>▦</span>Agents</button>
         <button class="nav-row skill-link" :class="view === 'skills' && 'active'" @click="go('skills')"><span>✦</span><span class="flex-1 text-left">Skills</span><span class="rounded-full bg-emerald-100 px-1.5 text-[10px] text-emerald-700">Hub</span></button>
       </nav>
-      <div class="mt-auto border-t border-slate-200 p-3"><div class="rounded-xl bg-white p-3 text-xs text-slate-500"><div class="flex justify-between"><span>Connection</span><span class="font-medium" :class="connected ? 'text-emerald-600' : 'text-amber-600'">{{ connected ? 'Live' : 'Reconnecting' }}</span></div><div v-if="version" class="mt-2 flex justify-between"><span>Build</span><span>{{ version }}</span></div></div></div>
+      <div class="mt-auto border-t border-slate-200 p-3"><div class="rounded-xl bg-white p-3 text-xs text-slate-500"><div class="flex justify-between"><span>Connection</span><span class="font-medium" :class="connected ? 'text-emerald-600' : 'text-amber-600'">{{ connected ? 'Live' : 'Reconnecting' }}</span></div><div v-if="timeLeft" class="mt-2 flex items-center justify-between gap-3"><span>Time left</span><span data-testid="worker-time-left" class="font-mono font-semibold tabular-nums" :class="expired ? 'text-rose-600' : 'text-slate-800'">{{ timeLeft }}</span></div><div v-if="resetAt" class="mt-1 flex items-center justify-between gap-3"><span>Resets at</span><span class="text-right text-[10px] text-slate-600">{{ resetAt }}</span></div><div v-if="version" class="mt-2 flex justify-between"><span>Build</span><span>{{ version }}</span></div></div></div>
     </aside>
-    <main class="min-h-0 min-w-0"><AgentView v-if="view === 'agents'" :agents="status.agents" :worker-name="workerName" :connected="connected" @open-menu="menuOpen = true" /><SkillsView v-else @open-menu="menuOpen = true" /></main>
+    <main class="min-h-0 min-w-0"><AgentView v-if="view === 'agents'" :agents="status.agents" :worker-name="workerName" :connected="connected" :time-left="timeLeft" @open-menu="menuOpen = true" /><SkillsView v-else @open-menu="menuOpen = true" /></main>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import AgentView from './components/AgentView.vue'
 import SkillsView from './components/SkillsView.vue'
 import type { StatusPayload } from './types'
@@ -22,6 +22,18 @@ const status = ref<StatusPayload>({ agents: [] }), connected = ref(false), menuO
 const view = ref(location.hash === '#skills' ? 'skills' : 'agents')
 const workerName = computed(() => status.value.worker?.name || 'Worker')
 const version = computed(() => status.value.version ? `${status.value.version.versionName || ''} (${status.value.version.versionCode || ''})` : '')
+const now = ref(Date.now())
+const expiresAtMs = computed(() => Date.parse(status.value.lifecycle?.expiresAt || ''))
+const expired = computed(() => Number.isFinite(expiresAtMs.value) && expiresAtMs.value <= now.value)
+const timeLeft = computed(() => {
+  if (!Number.isFinite(expiresAtMs.value)) return ''
+  const total = Math.max(0, Math.ceil((expiresAtMs.value - now.value) / 1000))
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const seconds = total % 60
+  return expired.value ? 'Expired' : `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+})
+const resetAt = computed(() => Number.isFinite(expiresAtMs.value) ? new Date(expiresAtMs.value).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '')
 async function go(next: 'agents' | 'skills') {
   view.value = next
   location.hash = next === 'skills' ? 'skills' : ''
@@ -31,7 +43,9 @@ async function go(next: 'agents' | 'skills') {
 }
 async function refresh() { const r = await fetch('/api/status'); if (!r.ok) throw new Error(`Status failed: ${r.status}`); status.value = await r.json() }
 function events() { const stream = new EventSource('/api/events'); stream.addEventListener('open', () => connected.value = true); stream.addEventListener('status', event => { connected.value = true; status.value = JSON.parse((event as MessageEvent).data) }); stream.addEventListener('error', () => connected.value = false) }
-onMounted(async () => { try { await refresh(); events() } catch { connected.value = false } })
+let timer: ReturnType<typeof setInterval> | undefined
+onMounted(async () => { timer = setInterval(() => { now.value = Date.now() }, 1000); try { await refresh(); events() } catch { connected.value = false } })
+onUnmounted(() => { if (timer) clearInterval(timer) })
 </script>
 
 <style scoped>

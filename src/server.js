@@ -334,6 +334,7 @@ function statusPayload(req) {
     : agents;
   return {
     version: buildVersion,
+    lifecycle: config.expiresAt ? { expiresAt: config.expiresAt } : null,
     auth: getAuthStatus(),
     router,
     agents: [

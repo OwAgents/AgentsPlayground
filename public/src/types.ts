@@ -3,7 +3,8 @@ export type Agent = {
 }
 
 export type StatusPayload = {
-  agents: Agent[]; worker?: { name?: string }; version?: { versionCode?: string | number; versionName?: string }
+  agents: Agent[]; worker?: { name?: string }; version?: { versionCode?: string | number; versionName?: string };
+  lifecycle?: { expiresAt?: string } | null
 }
 
 export type Skill = {
