@@ -5,6 +5,9 @@ set -euo pipefail
 : "${WORKER_AGENTS_URL:?Set WORKER_AGENTS_URL to the public Worker Agents URL}"
 
 public_url=${WORKER_AGENTS_URL%/}
+public_authority=${public_url#*://}
+public_authority=${public_authority%%/*}
+harness_url="http://${public_authority}:3080"
 public_host=${public_url#http://}
 public_host=${public_host#https://}
 public_host=${public_host%%/*}
@@ -46,11 +49,11 @@ EOF
 
 printf '%s\n' "$remote_script" | eval "$WORKER_SSH bash -s"
 
-rpc_body=$(curl -fsS -X POST "$public_url/api/settings.describe" \
+rpc_body=$(curl -fsS -X POST "$harness_url/api/settings.describe" \
   -H 'content-type: application/json' \
-  -H "origin: $public_url" \
+  -H "origin: $harness_url" \
   -H 'sec-fetch-site: same-origin' \
   --data '{"type":"client-request","rpcId":"live-test","method":"settings.describe","payload":{}}')
 grep -q '"ok":true' <<<"$rpc_body"
 printf 'deepseek_harness_public_settings=ok\n'
-printf 'deepseek_harness_public_url=%s\n' "$public_url"
+printf 'deepseek_harness_public_url=%s\n' "$harness_url"
