@@ -25,6 +25,7 @@ const WORKER_STATE_PATH = path.join(config.codexHome, '..', '.worker-agents', 's
 const ROUTER_LOG_PATH = '/tmp/9router.log';
 const consoleLogs = [];
 const MAX_CONSOLE_LOGS = 500;
+const PUBLIC_LOG_LINES = 40;
 
 function captureConsoleLog(level, args) {
   const raw = [].map.call(args, String).join(' ');
@@ -140,7 +141,7 @@ function encodedHttpsAgentUrl(publicOrigin, agentUrl, port) {
 }
 
 function publicAgent(agent, origin) {
-  if (!agent?.url) return agent;
+  if (!agent?.url) return { ...agent, logs: Array.isArray(agent?.logs) ? agent.logs.slice(-PUBLIC_LOG_LINES) : agent?.logs };
   try {
     const publicOrigin = new URL(origin);
     if (agent.proxied) {
@@ -148,11 +149,11 @@ function publicAgent(agent, origin) {
       rebased.protocol = publicOrigin.protocol;
       rebased.hostname = publicOrigin.hostname;
       rebased.port = publicOrigin.port;
-      return { ...agent, url: rebased.toString() };
+      return { ...agent, url: rebased.toString(), logs: Array.isArray(agent.logs) ? agent.logs.slice(-PUBLIC_LOG_LINES) : agent.logs };
     }
-    return { ...agent, url: encodedHttpsAgentUrl(origin, agent.url, agent.port) };
+    return { ...agent, url: encodedHttpsAgentUrl(origin, agent.url, agent.port), logs: Array.isArray(agent.logs) ? agent.logs.slice(-PUBLIC_LOG_LINES) : agent.logs };
   } catch {
-    return agent;
+    return { ...agent, logs: Array.isArray(agent.logs) ? agent.logs.slice(-PUBLIC_LOG_LINES) : agent.logs };
   }
 }
 
@@ -161,6 +162,7 @@ function publicRouter(router, origin) {
     const rebase = (url, port) => encodedHttpsAgentUrl(origin, url, port);
     return {
       ...router,
+      logs: Array.isArray(router?.logs) ? router.logs.slice(-PUBLIC_LOG_LINES) : router?.logs,
       url: rebase(router.url, router.livePort || router.configuredPort),
       agent: router.agent ? { ...router.agent, url: rebase(router.agent.url, router.agent.port) } : router.agent
     };
@@ -364,7 +366,7 @@ function statusPayload(req) {
         error: '',
         startedAt: '',
         command: '',
-        logs: [...consoleLogs]
+        logs: consoleLogs.slice(-PUBLIC_LOG_LINES)
       }
     ],
     setup: getSetupStatus()
