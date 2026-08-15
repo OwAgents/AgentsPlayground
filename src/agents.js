@@ -217,7 +217,7 @@ async function ensureDeepSeekHarnessInstalled(log) {
   const dir = deepSeekHarnessDir();
   const pnpm = 'npx --yes pnpm@9';
   if (!fs.existsSync(path.join(dir, 'package.json'))) {
-    await runCommand(`rm -rf ${shellQuote(dir)} && git clone --depth 1 https://github.com/deepseek-ai/deepseek-harness.git ${shellQuote(dir)}`, { onData: log });
+    await runCommand(`export PATH=/usr/local/bin:$PATH && rm -rf ${shellQuote(dir)} && git clone --depth 1 https://github.com/deepseek-ai/deepseek-harness.git ${shellQuote(dir)}`, { onData: log });
   }
   const trustSource = path.join(dir, 'packages/client/connection/src/index.ts');
   if (fs.existsSync(trustSource)) {
@@ -230,7 +230,7 @@ async function ensureDeepSeekHarnessInstalled(log) {
   }
   const buildMarker = path.join(dir, '.worker-agents-built');
   if (!fs.existsSync(buildMarker)) {
-    await runCommand(`cd ${shellQuote(dir)} && ${pnpm} install --frozen-lockfile && ${pnpm} build`, { onData: log });
+    await runCommand(`export PATH=/usr/local/bin:$PATH && cd ${shellQuote(dir)} && ${pnpm} install --frozen-lockfile && ${pnpm} build`, { onData: log });
     fs.writeFileSync(buildMarker, `${new Date().toISOString()}\n`);
   }
   ensureDeepSeekHarnessSettings();
@@ -241,7 +241,7 @@ function defaultDeepSeekHarnessCommand(port) {
   const dir = deepSeekHarnessDir();
   const trustedHost = deepSeekHarnessPublicHost(port);
   if (!trustedHost) throw new Error('DeepSeek Harness requires the Worker Agents public agentsweb hostname');
-  return `cd ${shellQuote(dir)} && exec npx --yes pnpm@9 dsh web --host 127.0.0.1 --port ${port} --trusted-host ${shellQuote(trustedHost)}`;
+  return `export PATH=/usr/local/bin:$PATH && cd ${shellQuote(dir)} && exec npx --yes pnpm@9 dsh web --host 127.0.0.1 --port ${port} --trusted-host ${shellQuote(trustedHost)}`;
 }
 
 function ensureHermesRouterConfig(port = routerPort()) {
@@ -906,7 +906,8 @@ const builtInDefinitions = [
     env: () => buildBaseEnv({
       NINE_ROUTER_API_KEY: routerApiKey(),
       OPENAI_API_KEY: routerApiKey(),
-      OPENAI_BASE_URL: routerBaseUrl()
+      OPENAI_BASE_URL: routerBaseUrl(),
+      PATH: `/usr/local/bin:${defaultPath}`
     })
   },
   {
