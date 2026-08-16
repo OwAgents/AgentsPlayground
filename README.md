@@ -7,7 +7,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white&style=for-the-badge)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white&style=for-the-badge)](Dockerfile)
 [![Status](https://img.shields.io/badge/Status-IT%20LIVES-brightgreen?style=for-the-badge)](#-quick-start)
-[![Stars](https://img.shields.io/github/stars/OpenWebAgents/workerAgents?style=for-the-badge&logo=github&color=gold)](https://github.com/OpenWebAgents/workerAgents/stargazers)
+[![Stars](https://img.shields.io/github/stars/replypaldevs/workerAgents?style=for-the-badge&logo=github&color=gold)](https://github.com/replypaldevs/workerAgents/stargazers)
 
 > **Your AI agents demanded a mission-control room.**
 > **We gave them buttons, logs, health states, and just enough supervision to look responsible.**
