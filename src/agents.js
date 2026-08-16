@@ -339,7 +339,7 @@ async function ensureHermesInstalled(port, log) {
 
 function defaultHermesWebUiCommand(port) {
   const hermesWebUiDir = process.env.HERMES_WEBUI_DIR || path.join(os.homedir(), 'hermes-webui');
-  const gatewayCheck = 'if [ -x /usr/local/lib/hermes-agent/venv/bin/python ]; then /usr/local/lib/hermes-agent/venv/bin/python -c "import sys; import gateway.status as s; sys.exit(0 if s.get_running_pid(cleanup_stale=False) else 1)"; fi';
+  const gatewayCheck = 'if [ ! -x /usr/local/lib/hermes-agent/venv/bin/python ]; then exit 1; fi; /usr/local/lib/hermes-agent/venv/bin/python -c "import sys; import gateway.status as s; sys.exit(0 if s.get_running_pid(cleanup_stale=False) else 1)"';
   const gatewayPrefix = [
     'if [ "${HERMES_WEBUI_START_GATEWAY:-1}" = "1" ] || [ "${HERMES_WEBUI_START_GATEWAY:-1}" = "true" ] || [ "${HERMES_WEBUI_START_GATEWAY:-1}" = "yes" ]; then ',
     `if ! ${gatewayCheck} >/dev/null 2>&1; then `,

@@ -39,8 +39,8 @@
             <p v-if="agent.error" class="mt-3 line-clamp-2 text-xs text-rose-600">{{ agent.error }}</p>
             <div class="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
               <button class="action" :disabled="isBusy(agent) || agent.state === 'running'" @click="act(agent, 'start')">Start</button>
-              <button class="action" :disabled="isBusy(agent)" @click="act(agent, 'restart')">Restart</button>
-              <button class="action text-rose-600" :disabled="isBusy(agent) || !canStop(agent)" @click="act(agent, 'stop')">Stop</button>
+              <button class="action" :disabled="isBusy(agent) || isGuestDemo" @click="act(agent, 'restart')">Restart</button>
+              <button class="action text-rose-600" :disabled="isBusy(agent) || !canStop(agent) || isGuestDemo" @click="act(agent, 'stop')">Stop</button>
               <button class="action ml-auto" @click="selectLogs(agent)">View logs</button>
             </div>
           </article>
@@ -68,6 +68,7 @@ const visibleAgents = computed(() => props.agents.filter(agent => agent.id !== '
 watch(() => props.agents, (agents) => { if (!agents.some(a => a.id === selectedId.value)) selectedId.value = agents[0]?.id || '' }, { immediate: true })
 const selected = computed(() => props.agents.find(a => a.id === selectedId.value))
 const runningCount = computed(() => visibleAgents.value.filter(a => a.state === 'running').length)
+const isGuestDemo = location.hostname.startsWith('guest-demo-') && location.hostname.endsWith('.agentsweb.space')
 const icons: Record<string, string> = { 'codex-web-local': '/icons/codex.png', opencode: '/icons/opencode.png', 'hermes-webui': '/icons/hermes.png', openwork: '/icons/openwork.png', 'agent-zero': '/icons/agent-zero.png', openclaw: '/icons/openclaw.png', 'deepseek-harness': '/icons/deepseek.svg' }
 const iconFor = (agent: Agent) => icons[agent.id] || ''
 const isBusy = (agent: Agent) => ['installing', 'starting', 'stopping'].includes(agent.state)
