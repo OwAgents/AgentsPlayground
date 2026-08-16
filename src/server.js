@@ -677,12 +677,14 @@ try {
     if (adapter.error) console.warn(`[rules] ${adapter.id}: ${adapter.error}`);
     else if (adapter.injected) console.log(`[rules] ${adapter.id}: injected ${adapter.targetPath}`);
   }
-  nineRouter.start(console.log).then((routerStatus) => {
+  const routerReady = nineRouter.start(console.log).then((routerStatus) => {
     if (routerStatus.state === 'error' && !routerStatus.livePort) {
       console.warn('[9router] Background startup did not produce a live listener');
     }
+    return routerStatus;
   }).catch((error) => {
     console.error('[9router] Startup error:', error.message);
+    return { state: 'error', livePort: 0 };
   });
   if (config.launch) {
     if (supervisor.agents.has(config.launch)) {
@@ -696,11 +698,16 @@ try {
   }
   if (config.autoStartAll) {
     console.log(`Auto-start mode: installing and starting all agents (${Array.from(supervisor.agents.keys()).join(', ')})...`);
-    supervisor.startAll().then((results) => {
+    routerReady.then(() => supervisor.startAll()).then((results) => {
       const failed = results.filter((result) => !result.ok);
       console.log(`Auto-start mode: ${results.length - failed.length}/${results.length} agents started.`);
       for (const result of failed) {
         console.error(`Auto-start mode: failed to start "${result.id}": ${result.error}`);
+      }
+      const finalRules = rulesService.inject();
+      for (const adapter of finalRules.adapters) {
+        if (adapter.error) console.warn(`[rules] ${adapter.id}: ${adapter.error}`);
+        else if (adapter.injected) console.log(`[rules] ${adapter.id}: injected ${adapter.targetPath}`);
       }
     }).catch((error) => {
       console.error('Auto-start mode: error during agent startup:', error.message);
