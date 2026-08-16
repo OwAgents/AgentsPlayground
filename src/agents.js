@@ -779,6 +779,23 @@ function ensureCodexWebUi9RouterConfig() {
   writeJson(statePath, state);
 }
 
+function ensureCodexCli9RouterConfig() {
+  const configPath = path.join(config.codexHome, 'config.toml');
+  fs.mkdirSync(config.codexHome, { recursive: true });
+  const content = [
+    'model_provider = "custom"',
+    `model = "${routerDefaultModel()}"`,
+    '',
+    '[model_providers.custom]',
+    'name = "Worker 9Router"',
+    `base_url = "${routerBaseUrl()}"`,
+    'wire_api = "responses"',
+    ''
+  ].join('\n');
+  fs.writeFileSync(configPath, content, { mode: 0o600 });
+  return configPath;
+}
+
 function ensureOpenClawConfig(port = 18789, models = liveRouterModels || [routerDefaultModel()]) {
   const configPath = path.join(config.openClawHome, 'openclaw.json');
   const existing = (() => {
@@ -1015,6 +1032,7 @@ const builtInDefinitions = [
       }
       await discoverRouterModels(log);
       ensureCodexWebUi9RouterConfig();
+      log(`[codex] configured native CLI provider at ${ensureCodexCli9RouterConfig()}`);
       ensureOpenClawPatch();
       injectRulesAfterInstall('codex', log);
     },
