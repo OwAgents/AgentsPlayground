@@ -239,10 +239,7 @@ function openCodeConfig(models = liveRouterModels || [routerDefaultModel()]) {
           baseURL: routerBaseUrl(),
           apiKey: routerApiKey()
         },
-        models: Object.fromEntries(models.map((model) => {
-          const normalized = normalizeOpenCodeModel(model);
-          return [normalized, { name: normalized }];
-        }))
+        models: Object.fromEntries(models.map((model) => [model, { name: model }]))
       }
     }
   });
@@ -262,11 +259,7 @@ function ensureOpenCodeConfig(models = liveRouterModels || [routerDefaultModel()
 
 function openCodeSelectedModel(models = liveRouterModels || [routerDefaultModel()]) {
   const preferred = models.includes(routerDefaultModel()) ? routerDefaultModel() : models[0];
-  return normalizeOpenCodeModel(preferred);
-}
-
-function normalizeOpenCodeModel(model) {
-  return String(model || '').replace(/^(?:opencode|oc)\//, '');
+  return preferred;
 }
 
 async function ensureDeepSeekHarnessSettings(log) {
