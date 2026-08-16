@@ -344,7 +344,7 @@ function defaultHermesWebUiCommand(port) {
     'if [ "${HERMES_WEBUI_START_GATEWAY:-1}" = "1" ] || [ "${HERMES_WEBUI_START_GATEWAY:-1}" = "true" ] || [ "${HERMES_WEBUI_START_GATEWAY:-1}" = "yes" ]; then ',
     `if ! ${gatewayCheck} >/dev/null 2>&1; then `,
     'gateway_bin="$(command -v hermes || true)"; ',
-    'if [ -z "$gateway_bin" ]; then for candidate in "$HOME/.hermes/bin/hermes" "$HOME/.local/bin/hermes" "$HOME/.local/share/hermes/bin/hermes"; do if [ -x "$candidate" ]; then gateway_bin="$candidate"; break; fi; done; fi; ',
+    'if [ -z "$gateway_bin" ]; then for candidate in "$HOME/.hermes/hermes-agent/venv/bin/hermes" "$HOME/.hermes/hermes-agent/hermes" "$HOME/.hermes/bin/hermes" "$HOME/.local/bin/hermes" "$HOME/.local/share/hermes/bin/hermes"; do if [ -x "$candidate" ]; then gateway_bin="$candidate"; break; fi; done; fi; ',
     'if [ -z "$gateway_bin" ]; then echo "Hermes gateway executable not found on PATH"; exit 1; fi; ',
     'gateway_log="${HERMES_WEBUI_GATEWAY_LOG:-${HERMES_HOME:-$HOME/.hermes}/gateway.log}"; ',
     'mkdir -p "$(dirname "$gateway_log")"; ',
@@ -1128,7 +1128,7 @@ const builtInDefinitions = [
     // WebSocket path from this query value; using the broker root works for
     // both the normal and lightweight clients, while the old default path
     // attempted a socket URL the public proxy did not route correctly.
-    path: '/vnc.html?autoconnect=1&resize=scale&path=proxy%2Fweb-vnc%2Fwebsockify',
+    path: '/proxy/web-vnc/vnc.html?autoconnect=1&resize=scale&path=proxy%2Fweb-vnc%2Fwebsockify',
     proxied: true,
     command: (port) => applyPortTemplate(
       commandFromEnv('AGENT_CMD_WEB_VNC', process.platform === 'darwin' ? defaultMacWebVncCommand(port) : defaultWebVncCommand(port)),
