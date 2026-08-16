@@ -226,7 +226,7 @@ async function discoverRouterModels(log) {
 }
 
 function openCodeConfig(models = liveRouterModels || [routerDefaultModel()]) {
-  const providerId = 'openai';
+  const providerId = '9router';
   const selectedModel = openCodeSelectedModel(models);
   return JSON.stringify({
     '$schema': 'https://opencode.ai/config.json',
@@ -255,7 +255,7 @@ function ensureOpenCodeConfig(models = liveRouterModels || [routerDefaultModel()
   fs.writeFileSync(configPath, `${openCodeConfig(models)}\n`, { mode: 0o600 });
   const authDir = path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'opencode');
   fs.mkdirSync(authDir, { recursive: true });
-  fs.writeFileSync(path.join(authDir, 'auth.json'), JSON.stringify({ openai: { type: 'api', key: routerApiKey() } }, null, 2) + '\n', { mode: 0o600 });
+  fs.writeFileSync(path.join(authDir, 'auth.json'), JSON.stringify({ '9router': { type: 'api', key: routerApiKey() } }, null, 2) + '\n', { mode: 0o600 });
   return configPath;
 }
 
