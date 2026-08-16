@@ -792,7 +792,7 @@ function ensureOpenClawConfig(port = 18789, models = liveRouterModels || [router
     ...(existing.models.providers[routerProviderId] || {}),
     baseUrl: routerBaseUrl(),
     apiKey: routerApiKey(),
-    api: 'openai-responses',
+    api: 'openai-completions',
     authHeader: true,
     models: models.map((model) => ({
       id: model,
