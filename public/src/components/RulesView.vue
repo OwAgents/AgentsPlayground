@@ -13,12 +13,12 @@
 
         <div class="space-y-3">
           <details open class="overflow-hidden rounded-xl border border-slate-200 bg-white">
-            <summary class="flex cursor-pointer list-none items-center gap-3 bg-slate-50 px-4 py-3"><input v-model="includeDeploymentRules" type="checkbox" class="h-4 w-4 accent-violet-700" @click.stop /><span class="flex-1 text-sm font-medium text-slate-800">Deployment rules</span><span class="text-xs text-slate-400">{{ includeDeploymentRules ? 'Enabled' : 'Disabled' }}</span><span class="text-slate-400">⌄</span></summary>
+            <summary class="section-summary"><input v-model="includeDeploymentRules" type="checkbox" class="h-4 w-4 accent-violet-700" @click.stop /><span class="min-w-0 flex-1 text-sm font-medium text-slate-800">Deployment rules</span><span class="text-xs text-slate-400">{{ includeDeploymentRules ? 'Enabled' : 'Disabled' }}</span><span class="section-chevron" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><path d="m6 8 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></summary>
             <textarea :value="rules.generated" readonly class="min-h-56 w-full resize-y border-0 bg-white p-4 font-mono text-xs leading-relaxed text-slate-500 outline-none" placeholder="Deployment rules are available only on a deployed worker." />
           </details>
 
           <details v-for="section in sections" :key="section.id" open class="overflow-hidden rounded-xl border border-slate-200 bg-white">
-            <summary class="flex cursor-pointer list-none items-center gap-3 bg-slate-50 px-4 py-3"><input v-model="section.enabled" type="checkbox" class="h-4 w-4 accent-violet-700" @click.stop /><input v-model="section.title" class="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none" @click.stop /><button v-if="section.removable" class="grid h-6 w-6 place-items-center rounded-md text-lg text-rose-500 hover:bg-rose-50" title="Remove section" @click.prevent.stop="removeSection(section.id)">−</button><span class="text-slate-400">⌄</span></summary>
+            <summary class="section-summary"><input v-model="section.enabled" type="checkbox" class="h-4 w-4 accent-violet-700" @click.stop /><input v-model="section.title" class="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none" @click.stop /><button v-if="section.removable" class="grid h-7 w-7 place-items-center rounded-full text-lg text-rose-500 hover:bg-rose-50" title="Remove section" @click.prevent.stop="removeSection(section.id)">−</button><span class="section-chevron" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><path d="m6 8 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></summary>
             <textarea v-model="section.content" class="min-h-48 w-full resize-y border-0 bg-white p-4 font-mono text-xs leading-relaxed text-slate-700 outline-none" :placeholder="section.id === 'shared' ? 'Add mandatory rules for agents on this worker…' : 'Add rules for this section…'" />
           </details>
         </div>
@@ -29,7 +29,7 @@
         <section class="mt-8 rounded-2xl border border-slate-200 bg-white p-4 sm:px-6">
           <div class="mb-2 flex items-center justify-between"><h3 class="text-xs font-semibold text-slate-700">Agent adapters</h3><span class="text-[10px] text-slate-400">New sessions load saved rules</span></div>
           <div class="grid gap-2 sm:grid-cols-2">
-            <details v-for="adapter in rules.adapters" :key="adapter.id" class="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs"><summary class="flex cursor-pointer list-none items-center justify-between gap-2"><span class="font-medium text-slate-700">{{ adapter.id }}</span><span :class="adapter.error ? 'text-rose-600' : adapter.injected ? 'text-emerald-600' : 'text-slate-400'">{{ adapter.error ? 'Error' : adapter.injected ? 'Injected' : adapter.skipped ? 'Skipped' : 'Ready' }}</span></summary><p class="mt-2 break-all text-[10px] text-slate-400">{{ adapter.targetPath || adapter.reason || 'No target' }}</p><p v-if="adapter.error" class="mt-1 text-[10px] text-rose-600">{{ adapter.error }}</p></details>
+            <details v-for="adapter in rules.adapters" :key="adapter.id" class="adapter-details rounded-lg border border-slate-100 bg-slate-50 text-xs"><summary class="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5"><span class="min-w-0 flex-1 font-medium text-slate-700">{{ adapter.id }}</span><span :class="adapter.error ? 'text-rose-600' : adapter.injected ? 'text-emerald-600' : 'text-slate-400'">{{ adapter.error ? 'Error' : adapter.injected ? 'Injected' : adapter.skipped ? 'Skipped' : 'Ready' }}</span><span class="section-chevron small" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><path d="m6 8 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></summary><div class="border-t border-slate-100 px-3 py-2"><p class="break-all text-[10px] text-slate-400">{{ adapter.targetPath || adapter.reason || 'No target' }}</p><p v-if="adapter.error" class="mt-1 text-[10px] text-rose-600">{{ adapter.error }}</p></div></details>
           </div>
         </section>
       </div>
@@ -50,3 +50,13 @@ function removeSection(id: string) { sections.value = sections.value.filter(sect
 async function saveRules() { saving.value = true; message.value = ''; hasError.value = false; try { const response = await fetch('/api/rules', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content: '', includeDeploymentRules: includeDeploymentRules.value, sections: sections.value }) }); const data = await response.json(); if (!response.ok || !data.ok) throw new Error(data.error); applyPayload(data); const failed = data.adapters.filter((adapter: { error: string | null }) => adapter.error).length; message.value = failed ? `Rules saved with ${failed} adapter error${failed === 1 ? '' : 's'}.` : 'Rules saved and injected. Start a new agent session to use them.'; hasError.value = failed > 0 } catch (error) { hasError.value = true; message.value = error instanceof Error ? error.message : 'Rules save failed.' } finally { saving.value = false } }
 onMounted(loadRules)
 </script>
+
+<style scoped>
+@reference "tailwindcss";
+.section-summary { @apply flex cursor-pointer list-none items-center gap-3 bg-slate-50 px-4 py-3 transition hover:bg-slate-100; }
+.section-summary::-webkit-details-marker, .adapter-details summary::-webkit-details-marker { display: none; }
+.section-chevron { @apply grid h-7 w-7 shrink-0 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition-transform duration-200; }
+.section-chevron svg { @apply h-4 w-4; }
+.section-chevron.small { @apply h-6 w-6; }
+details[open] > summary .section-chevron { transform: rotate(180deg); }
+</style>
