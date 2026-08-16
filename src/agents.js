@@ -12,6 +12,8 @@ import { reconcileRules } from './rules.js';
 
 const ANSI_ESCAPE = /\u001B\[[0-9;?]*[ -/]*[@-~]/g;
 const browserHost = process.env.AGENT_BROWSER_HOST || '127.0.0.1';
+const OPEN_CODE_ROUTER_PROXY_PORT = Number.parseInt(process.env.WORKER_AGENTS_OPENCODE_PROXY_PORT || '20129', 10);
+let openCodeRouterProxyServer = null;
 
 function stripAnsi(line) {
   return String(line).replace(ANSI_ESCAPE, '');
@@ -236,7 +238,7 @@ function openCodeConfig(models = liveRouterModels || [routerDefaultModel()]) {
         npm: '@ai-sdk/openai-compatible',
         name: '9Router',
         options: {
-          baseURL: routerBaseUrl(),
+          baseURL: `http://127.0.0.1:${OPEN_CODE_ROUTER_PROXY_PORT}/v1`,
           apiKey: routerApiKey()
         },
         models: Object.fromEntries(models.map((model) => {
@@ -246,6 +248,33 @@ function openCodeConfig(models = liveRouterModels || [routerDefaultModel()]) {
       }
     }
   });
+}
+
+function ensureOpenCodeRouterProxy(log) {
+  if (openCodeRouterProxyServer) return;
+  openCodeRouterProxyServer = http.createServer((req, res) => {
+    const chunks = [];
+    req.on('data', (chunk) => chunks.push(chunk));
+    req.on('end', () => {
+      let body = Buffer.concat(chunks);
+      if (body.length && req.method !== 'GET' && req.method !== 'HEAD') {
+        try {
+          const payload = JSON.parse(body.toString('utf8'));
+          if (typeof payload.model === 'string' && !payload.model.includes('/')) payload.model = `oc/${payload.model}`;
+          body = Buffer.from(JSON.stringify(payload));
+        } catch {}
+      }
+      const upstream = http.request({ hostname: '127.0.0.1', port: routerPort(), method: req.method, path: req.url, headers: { ...req.headers, host: `127.0.0.1:${routerPort()}`, 'content-length': body.length } }, (upstreamRes) => {
+        res.writeHead(upstreamRes.statusCode || 502, upstreamRes.headers);
+        upstreamRes.pipe(res);
+      });
+      upstream.on('error', (error) => sendJson(res, 502, { error: error.message }));
+      if (body.length) upstream.write(body);
+      upstream.end();
+    });
+  });
+  openCodeRouterProxyServer.listen(OPEN_CODE_ROUTER_PROXY_PORT, '127.0.0.1');
+  log?.(`[opencode] local model compatibility proxy listening on ${OPEN_CODE_ROUTER_PROXY_PORT}`);
 }
 
 function ensureOpenCodeConfig(models = liveRouterModels || [routerDefaultModel()]) {
@@ -1058,6 +1087,7 @@ const builtInDefinitions = [
     beforeStart: async (_port, log) => {
       await discoverRouterModels(log);
       await ensureGlobalPackage('opencode', 'opencode-ai', log);
+      ensureOpenCodeRouterProxy(log);
       log(`[opencode] configured local 9Router provider at ${ensureOpenCodeConfig()}`);
       injectRulesAfterInstall('opencode', log);
     },
