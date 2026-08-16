@@ -246,6 +246,14 @@ function openCodeConfig(models = liveRouterModels || [routerDefaultModel()]) {
   });
 }
 
+function ensureOpenCodeConfig(models = liveRouterModels || [routerDefaultModel()]) {
+  const configDir = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'opencode');
+  const configPath = path.join(configDir, 'opencode.json');
+  fs.mkdirSync(configDir, { recursive: true });
+  fs.writeFileSync(configPath, `${openCodeConfig(models)}\n`, { mode: 0o600 });
+  return configPath;
+}
+
 function openCodeSelectedModel(models = liveRouterModels || [routerDefaultModel()]) {
   return models.includes(routerDefaultModel()) ? routerDefaultModel() : models[0];
 }
@@ -1025,6 +1033,7 @@ const builtInDefinitions = [
     beforeStart: async (_port, log) => {
       await discoverRouterModels(log);
       await ensureGlobalPackage('opencode', 'opencode-ai', log);
+      log(`[opencode] configured local 9Router provider at ${ensureOpenCodeConfig()}`);
       injectRulesAfterInstall('opencode', log);
     },
     env: () => buildBaseEnv({
