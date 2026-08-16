@@ -255,7 +255,8 @@ function ensureOpenCodeConfig(models = liveRouterModels || [routerDefaultModel()
   fs.writeFileSync(configPath, `${openCodeConfig(models)}\n`, { mode: 0o600 });
   const authDir = path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'opencode');
   fs.mkdirSync(authDir, { recursive: true });
-  fs.writeFileSync(path.join(authDir, 'auth.json'), JSON.stringify({ '9router': { type: 'api', key: routerApiKey() } }, null, 2) + '\n', { mode: 0o600 });
+  const routerCredential = { type: 'api', key: routerApiKey() };
+  fs.writeFileSync(path.join(authDir, 'auth.json'), JSON.stringify({ '9router': routerCredential, openai: routerCredential }, null, 2) + '\n', { mode: 0o600 });
   return configPath;
 }
 
@@ -1154,6 +1155,7 @@ const builtInDefinitions = [
       UV_USE_IO_URING: '0',
       PLAYWRIGHT_BROWSERS_PATH: '/root/.cache/ms-playwright',
       NODE_OPTIONS: `--require ${openClawPatchPath()}`,
+      OPENCLAW_CONFIG_PATH: path.join(config.openClawHome, 'openclaw.json'),
       OPENAI_BASE_URL: routerBaseUrl(),
       OPENAI_API_KEY: routerApiKey(),
       OPENCLAW_GATEWAY_TOKEN: readOpenClawToken(),
