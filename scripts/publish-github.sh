@@ -3,7 +3,7 @@ set -euo pipefail
 
 project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 git_dir="$project_dir/.git2"
-owner=${GITHUB_OWNER:-OpenWebAgents}
+owner=${GITHUB_OWNER:-replypaldevs}
 repo=${GITHUB_REPO:-workerAgents}
 visibility=${GITHUB_VISIBILITY:-public}
 message=${1:-"Publish Worker Agents"}
