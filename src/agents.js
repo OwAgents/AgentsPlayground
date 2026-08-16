@@ -239,7 +239,10 @@ function openCodeConfig(models = liveRouterModels || [routerDefaultModel()]) {
           baseURL: routerBaseUrl(),
           apiKey: routerApiKey()
         },
-        models: Object.fromEntries(models.map((model) => [model, { name: model }]))
+        models: Object.fromEntries(models.map((model) => {
+          const openCodeModel = model.startsWith('oc/') ? `oc/${model}` : model;
+          return [openCodeModel, { name: model }];
+        }))
       }
     }
   });
@@ -259,7 +262,7 @@ function ensureOpenCodeConfig(models = liveRouterModels || [routerDefaultModel()
 
 function openCodeSelectedModel(models = liveRouterModels || [routerDefaultModel()]) {
   const preferred = models.includes(routerDefaultModel()) ? routerDefaultModel() : models[0];
-  return preferred;
+  return preferred.startsWith('oc/') ? `oc/${preferred}` : preferred;
 }
 
 async function ensureDeepSeekHarnessSettings(log) {
