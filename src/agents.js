@@ -795,7 +795,9 @@ function ensureOpenClawConfig(port = 18789, models = liveRouterModels || [router
   existing.agents ||= {};
   existing.agents.defaults ||= {};
   existing.agents.defaults.model = { primary: routerQualifiedModel };
-  existing.agents.defaults.models = { [routerQualifiedModel]: {} };
+  existing.agents.defaults.models = Object.fromEntries(
+    models.map((model) => [`${routerProviderId}/${model}`, {}])
+  );
   existing.gateway ||= {};
   existing.gateway.mode ||= 'local';
   existing.gateway.trustedProxies = Array.from(new Set([
