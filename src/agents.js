@@ -1135,6 +1135,7 @@ const builtInDefinitions = [
       NODE_OPTIONS: `--require ${openClawPatchPath()}`,
       OPENAI_BASE_URL: routerBaseUrl(),
       OPENAI_API_KEY: routerApiKey(),
+      OPENCLAW_GATEWAY_TOKEN: readOpenClawToken(),
       OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY || '',
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',
       BRAVE_API_KEY: process.env.BRAVE_API_KEY || ''
