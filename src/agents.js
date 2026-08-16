@@ -344,6 +344,7 @@ function defaultHermesWebUiCommand(port) {
     'if [ "${HERMES_WEBUI_START_GATEWAY:-1}" = "1" ] || [ "${HERMES_WEBUI_START_GATEWAY:-1}" = "true" ] || [ "${HERMES_WEBUI_START_GATEWAY:-1}" = "yes" ]; then ',
     `if ! ${gatewayCheck} >/dev/null 2>&1; then `,
     'gateway_bin="$(command -v hermes || true)"; ',
+    'if [ -z "$gateway_bin" ]; then for candidate in "$HOME/.hermes/bin/hermes" "$HOME/.local/bin/hermes" "$HOME/.local/share/hermes/bin/hermes"; do if [ -x "$candidate" ]; then gateway_bin="$candidate"; break; fi; done; fi; ',
     'if [ -z "$gateway_bin" ]; then echo "Hermes gateway executable not found on PATH"; exit 1; fi; ',
     'gateway_log="${HERMES_WEBUI_GATEWAY_LOG:-${HERMES_HOME:-$HOME/.hermes}/gateway.log}"; ',
     'mkdir -p "$(dirname "$gateway_log")"; ',
