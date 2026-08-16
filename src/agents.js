@@ -1127,7 +1127,7 @@ const builtInDefinitions = [
     // WebSocket path from this query value; using the broker root works for
     // both the normal and lightweight clients, while the old default path
     // attempted a socket URL the public proxy did not route correctly.
-    path: '/vnc.html?autoconnect=1&resize=scale&path=proxy%2Fweb-vnc',
+    path: '/vnc.html?autoconnect=1&resize=scale&path=proxy%2Fweb-vnc%2Fwebsockify',
     proxied: true,
     command: (port) => applyPortTemplate(
       commandFromEnv('AGENT_CMD_WEB_VNC', process.platform === 'darwin' ? defaultMacWebVncCommand(port) : defaultWebVncCommand(port)),
