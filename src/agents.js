@@ -225,6 +225,31 @@ async function discoverRouterModels(log) {
   return liveRouterModels;
 }
 
+function openCodeConfig(models = liveRouterModels || [routerDefaultModel()]) {
+  const providerId = '9router';
+  const selectedModel = openCodeSelectedModel(models);
+  return JSON.stringify({
+    '$schema': 'https://opencode.ai/config.json',
+    disabled_providers: ['openai'],
+    model: `${providerId}/${selectedModel}`,
+    provider: {
+      [providerId]: {
+        npm: '@ai-sdk/openai-compatible',
+        name: '9Router',
+        options: {
+          baseURL: routerBaseUrl(),
+          apiKey: routerApiKey()
+        },
+        models: Object.fromEntries(models.map((model) => [model, { name: model }]))
+      }
+    }
+  });
+}
+
+function openCodeSelectedModel(models = liveRouterModels || [routerDefaultModel()]) {
+  return models.includes(routerDefaultModel()) ? routerDefaultModel() : models[0];
+}
+
 async function ensureDeepSeekHarnessSettings(log) {
   const models = await discoverRouterModels(log);
   const preferredModel = deepSeekHarnessModel();
@@ -1001,8 +1026,8 @@ const builtInDefinitions = [
       injectRulesAfterInstall('opencode', log);
     },
     env: () => buildBaseEnv({
-      OPENAI_BASE_URL: routerBaseUrl(),
-      OPENAI_API_KEY: routerApiKey()
+      OPENCODE_CONFIG_CONTENT: openCodeConfig(),
+      OPENCODE_MODEL: `9router/${openCodeSelectedModel()}`
     })
   },
   {

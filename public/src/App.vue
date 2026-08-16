@@ -6,10 +6,11 @@
       <nav class="space-y-1 px-3">
         <button class="nav-row" :class="view === 'agents' && 'active'" @click="go('agents')"><span>▦</span>Agents</button>
         <button class="nav-row skill-link" :class="view === 'skills' && 'active'" @click="go('skills')"><span>✦</span><span class="flex-1 text-left">Skills</span><span class="rounded-full bg-emerald-100 px-1.5 text-[10px] text-emerald-700">Hub</span></button>
+        <button class="nav-row" :class="view === 'rules' && 'active'" @click="go('rules')"><span>≡</span>Rules</button>
       </nav>
       <div class="mt-auto border-t border-slate-200 p-3"><div class="rounded-xl bg-white p-3 text-xs text-slate-500"><div class="flex justify-between"><span>Connection</span><span class="font-medium" :class="connected ? 'text-emerald-600' : 'text-amber-600'">{{ connected ? 'Live' : 'Reconnecting' }}</span></div><div v-if="timeLeft" class="mt-2 flex items-center justify-between gap-3"><span>Time left</span><span data-testid="worker-time-left" class="font-mono font-semibold tabular-nums" :class="expired ? 'text-rose-600' : 'text-slate-800'">{{ timeLeft }}</span></div><div v-if="resetAt" class="mt-1 flex items-center justify-between gap-3"><span>Resets at</span><span class="text-right text-[10px] text-slate-600">{{ resetAt }}</span></div><div v-if="version" class="mt-2 flex justify-between"><span>Build</span><span>{{ version }}</span></div></div></div>
     </aside>
-    <main class="min-h-0 min-w-0"><AgentView v-if="view === 'agents'" :agents="status.agents" :worker-name="workerName" :connected="connected" :time-left="timeLeft" @open-menu="menuOpen = true" /><SkillsView v-else @open-menu="menuOpen = true" /></main>
+    <main class="min-h-0 min-w-0"><AgentView v-if="view === 'agents'" :agents="status.agents" :worker-name="workerName" :connected="connected" :time-left="timeLeft" @open-menu="menuOpen = true" /><SkillsView v-else-if="view === 'skills'" @open-menu="menuOpen = true" /><RulesView v-else @open-menu="menuOpen = true" /></main>
   </div>
 </template>
 
@@ -17,9 +18,10 @@
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import AgentView from './components/AgentView.vue'
 import SkillsView from './components/SkillsView.vue'
+import RulesView from './components/RulesView.vue'
 import type { StatusPayload } from './types'
 const status = ref<StatusPayload>({ agents: [] }), connected = ref(false), menuOpen = ref(false)
-const view = ref(location.hash === '#skills' ? 'skills' : 'agents')
+const view = ref<'agents' | 'skills' | 'rules'>(location.hash === '#skills' ? 'skills' : location.hash === '#rules' ? 'rules' : 'agents')
 const workerName = computed(() => status.value.worker?.name || 'Worker')
 const version = computed(() => status.value.version ? `${status.value.version.versionName || ''} (${status.value.version.versionCode || ''})` : '')
 const now = ref(Date.now())
@@ -34,9 +36,9 @@ const timeLeft = computed(() => {
   return expired.value ? 'Expired' : `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 })
 const resetAt = computed(() => Number.isFinite(expiresAtMs.value) ? new Date(expiresAtMs.value).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '')
-async function go(next: 'agents' | 'skills') {
+async function go(next: 'agents' | 'skills' | 'rules') {
   view.value = next
-  location.hash = next === 'skills' ? 'skills' : ''
+  location.hash = next === 'agents' ? '' : next
   menuOpen.value = false
   await nextTick()
   document.querySelector('main > section > div.overflow-y-auto')?.scrollTo({ top: 0 })

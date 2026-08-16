@@ -93,12 +93,38 @@ function baseReport(id, installed, targetPath, reason = null) {
   return { id, installed, targetPath, injected: false, skipped: !installed || Boolean(reason), reason: reason || (!installed ? 'not-installed' : null), error: null };
 }
 
+function normalizeSections(sections, fallbackContent = '') {
+  if (!Array.isArray(sections) || !sections.length) {
+    return [{ id: 'shared', title: 'Shared agent instructions', content: fallbackContent, enabled: true, removable: false }];
+  }
+  const seen = new Set();
+  return sections.map((section, index) => {
+    let id = String(section?.id || `section-${index + 1}`).replace(/[^a-zA-Z0-9_-]/g, '-');
+    while (seen.has(id)) id = `${id}-${index + 1}`;
+    seen.add(id);
+    return {
+      id,
+      title: String(section?.title || `Section ${index + 1}`).trim() || `Section ${index + 1}`,
+      content: String(section?.content || ''),
+      enabled: section?.enabled !== false,
+      removable: id !== 'shared'
+    };
+  });
+}
+
+function renderEnabledSections(sections) {
+  const enabled = sections.filter((section) => section.enabled && section.content.trim());
+  if (enabled.length === 1 && enabled[0].id === 'shared') return enabled[0].content.trim();
+  return enabled.map((section) => `## ${section.title}\n\n${section.content.trim()}`).join('\n\n');
+}
+
 export function createRulesService(options = {}) {
   const env = options.env || process.env;
   const homeDir = options.homeDir || os.homedir();
   const projectRoot = options.projectRoot || config.projectRoot;
   const workerStateDir = env.WORKER_AGENTS_STATE_DIR || path.join(homeDir, '.worker-agents');
   const rulesPath = options.rulesPath || path.join(workerStateDir, 'Rules.md');
+  const settingsPath = options.settingsPath || path.join(workerStateDir, 'rules-settings.json');
   const statePath = options.statePath || path.join(workerStateDir, 'state.json');
   const templatePath = options.templatePath || path.join(projectRoot, 'Rules.template.md');
   const hasCommand = options.commandExists || ((command) => commandExists(command, env));
@@ -137,11 +163,20 @@ export function createRulesService(options = {}) {
   }
 
   function effectiveState() {
-    const content = readText(rulesPath);
     const deployment = deploymentContext(statePublicUrl(statePath, env));
+    const settings = (() => {
+      try {
+        return JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      } catch {
+        return {};
+      }
+    })();
+    const includeDeploymentRules = typeof settings.includeDeploymentRules === 'boolean' ? settings.includeDeploymentRules : Boolean(deployment);
+    const sections = normalizeSections(settings.sections, readText(rulesPath));
     const generated = renderRulesTemplate(readText(templatePath), deployment);
-    const effective = [generated, content.trim()].filter(Boolean).join('\n\n');
-    return { content, generated, effective, deployment };
+    const content = renderEnabledSections(sections);
+    const effective = [includeDeploymentRules ? generated : '', content].filter(Boolean).join('\n\n');
+    return { content, generated, effective, deployment, includeDeploymentRules, sections };
   }
 
   function inject(ids = null) {
@@ -176,15 +211,21 @@ export function createRulesService(options = {}) {
       content: state.content,
       generated: state.generated,
       effective: state.effective,
+      includeDeploymentRules: state.includeDeploymentRules,
+      sections: state.sections,
       deployed: Boolean(state.deployment),
       deployment: state.deployment,
       adapters: reports.length ? reports : detectAdapters()
     };
   }
 
-  function save(content) {
+  function save(content, includeDeploymentRules, sections) {
     if (typeof content !== 'string') throw new Error('Rules content must be a string.');
-    atomicWrite(rulesPath, content);
+    const current = effectiveState();
+    const normalized = normalizeSections(sections, content);
+    const rendered = renderEnabledSections(normalized);
+    atomicWrite(rulesPath, rendered);
+    atomicWrite(settingsPath, `${JSON.stringify({ includeDeploymentRules: typeof includeDeploymentRules === 'boolean' ? includeDeploymentRules : current.includeDeploymentRules, sections: normalized }, null, 2)}\n`);
     return inject();
   }
 

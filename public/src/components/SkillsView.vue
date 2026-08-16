@@ -6,32 +6,6 @@
     </header>
     <div class="min-h-0 flex-1 overflow-y-auto">
       <div class="mx-auto w-full max-w-4xl px-4 py-8 sm:px-8">
-        <section class="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div class="border-b border-slate-100 p-5 sm:p-6">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-              <div><p class="text-xs font-medium text-violet-700">MANDATORY RULES</p><h2 class="mt-1 text-lg font-semibold text-slate-900">Shared agent instructions</h2><p class="mt-1 text-sm text-slate-500">Saved on this worker and injected into every supported installed agent.</p></div>
-              <span class="rounded-full px-2.5 py-1 text-xs font-medium" :class="rules.deployed ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'">{{ rules.deployed ? 'Deployed worker' : 'Local mode' }}</span>
-            </div>
-            <textarea v-model="rulesText" class="mt-4 min-h-40 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 p-3 font-mono text-xs leading-relaxed text-slate-700 outline-none ring-violet-500 focus:bg-white focus:ring-2" placeholder="Add mandatory rules for agents on this worker…" />
-            <div class="mt-3 flex flex-wrap items-center justify-between gap-3"><p class="text-xs text-slate-400">Running conversations are unchanged. Start a new session after saving.</p><button class="rounded-xl bg-violet-700 px-4 py-2 text-sm font-medium text-white hover:bg-violet-800 disabled:opacity-50" :disabled="savingRules || loadingRules" @click="saveRules">{{ savingRules ? 'Saving…' : 'Save and inject' }}</button></div>
-            <p v-if="rulesMessage" class="mt-2 text-xs" :class="rulesError ? 'text-rose-600' : 'text-emerald-600'">{{ rulesMessage }}</p>
-          </div>
-          <div class="grid gap-px bg-slate-100 lg:grid-cols-2">
-            <details class="bg-white p-4"><summary class="cursor-pointer text-xs font-medium text-slate-700">Generated deployment rules</summary><pre class="mt-3 max-h-56 overflow-auto whitespace-pre-wrap text-[11px] leading-relaxed text-slate-500">{{ rules.generated || 'No deployment rules in local mode.' }}</pre></details>
-            <details class="bg-white p-4"><summary class="cursor-pointer text-xs font-medium text-slate-700">Effective rules preview</summary><pre class="mt-3 max-h-56 overflow-auto whitespace-pre-wrap text-[11px] leading-relaxed text-slate-500">{{ rules.effective || 'No rules configured.' }}</pre></details>
-          </div>
-          <div class="border-t border-slate-100 p-4 sm:px-6">
-            <div class="mb-2 flex items-center justify-between"><h3 class="text-xs font-semibold text-slate-700">Agent adapters</h3><span class="text-[10px] text-slate-400">{{ rules.rulesPath }}</span></div>
-            <div class="grid gap-2 sm:grid-cols-2">
-              <div v-for="adapter in rules.adapters" :key="adapter.id" class="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs">
-                <div class="flex items-center justify-between gap-2"><span class="font-medium text-slate-700">{{ adapter.id }}</span><span :class="adapter.error ? 'text-rose-600' : adapter.injected ? 'text-emerald-600' : 'text-slate-400'">{{ adapter.error ? 'Error' : adapter.injected ? 'Injected' : adapter.skipped ? 'Skipped' : 'Ready' }}</span></div>
-                <p class="mt-1 truncate text-[10px] text-slate-400" :title="adapter.targetPath || adapter.reason || ''">{{ adapter.targetPath || adapter.reason || 'No target' }}</p>
-                <p v-if="adapter.error" class="mt-1 text-[10px] text-rose-600">{{ adapter.error }}</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
         <div class="mb-8 rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-5 sm:p-6">
           <p class="text-xs font-medium text-emerald-700">SKILL HUB</p>
           <h2 class="mt-1 text-xl font-semibold tracking-tight text-slate-900">Give your agents new capabilities</h2>
@@ -69,21 +43,17 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import type { RulesPayload, Skill } from '../types'
+import type { Skill } from '../types'
 import SkillCard from './SkillCard.vue'
 defineEmits<{ 'open-menu': [] }>()
 const installed = ref<Skill[]>([]), results = ref<Skill[]>([]), query = ref(''), error = ref(''), toast = ref('')
 const loading = ref(false), searching = ref(false), installing = ref(false), detail = ref<Skill | null>(null)
-const emptyRules: RulesPayload = { ok: true, rulesPath: '', content: '', generated: '', effective: '', deployed: false, deployment: null, adapters: [] }
-const rules = ref<RulesPayload>(emptyRules), rulesText = ref(''), loadingRules = ref(false), savingRules = ref(false), rulesMessage = ref(''), rulesError = ref(false)
 function merged(skill: Skill) { const local = installed.value.find(item => item.name === skill.name); return local ? { ...skill, ...local, source: skill.source, url: skill.url || local.url } : skill }
 async function loadInstalled() { loading.value = true; try { const r = await fetch('/api/skills-hub'); const data = await r.json(); if (!r.ok) throw new Error(data.error); installed.value = data.installed || [] } catch (e) { error.value = e instanceof Error ? e.message : 'Failed to load skills.' } finally { loading.value = false } }
 async function search() { searching.value = true; error.value = ''; try { const r = await fetch(`/api/skills-hub/search?q=${encodeURIComponent(query.value.trim())}`); const data = await r.json(); if (!r.ok) throw new Error(data.error); results.value = data.results || []; if (!results.value.length) toastFor('No matching skills found.') } catch (e) { error.value = e instanceof Error ? e.message : 'Search failed.' } finally { searching.value = false } }
 async function open(skill: Skill) { detail.value = skill; if (skill.installed) { try { const r = await fetch(`/api/skills-hub/readme?name=${encodeURIComponent(skill.name)}`); if (r.ok) detail.value = { ...skill, ...await r.json() } } catch {} } }
 async function install() { if (!detail.value?.source) return; installing.value = true; try { const r = await fetch('/api/skills-hub/install', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ source: detail.value.source, name: detail.value.name }) }); const data = await r.json(); if (!r.ok || !data.ok) throw new Error(data.error); await loadInstalled(); toastFor(`${detail.value.displayName || detail.value.name} installed`); detail.value = null } catch (e) { toastFor(e instanceof Error ? e.message : 'Installation failed.') } finally { installing.value = false } }
-async function loadRules() { loadingRules.value = true; try { const r = await fetch('/api/rules'); const data = await r.json(); if (!r.ok) throw new Error(data.error); rules.value = data; rulesText.value = data.content || '' } catch (e) { rulesError.value = true; rulesMessage.value = e instanceof Error ? e.message : 'Failed to load rules.' } finally { loadingRules.value = false } }
-async function saveRules() { savingRules.value = true; rulesMessage.value = ''; rulesError.value = false; try { const r = await fetch('/api/rules', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content: rulesText.value }) }); const data = await r.json(); if (!r.ok || !data.ok) throw new Error(data.error); rules.value = data; rulesText.value = data.content || ''; const failed = data.adapters.filter((adapter: { error: string | null }) => adapter.error).length; rulesMessage.value = failed ? `Rules saved with ${failed} adapter error${failed === 1 ? '' : 's'}.` : 'Rules saved and injected. Start a new agent session to use them.'; rulesError.value = failed > 0 } catch (e) { rulesError.value = true; rulesMessage.value = e instanceof Error ? e.message : 'Rules save failed.' } finally { savingRules.value = false } }
 function toastFor(message: string) { toast.value = message; window.setTimeout(() => { toast.value = '' }, 3000) }
 function withoutFrontmatter(content: string) { return content.replace(/^---[\s\S]*?---\s*/, '').slice(0, 12000) }
-onMounted(() => { loadInstalled(); loadRules() })
+onMounted(loadInstalled)
 </script>

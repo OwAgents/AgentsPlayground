@@ -20,6 +20,7 @@ node .next/standalone/server.js
 - The standalone server path is resolved at bootstrap runtime from the npm global package locations.
 - On macOS, 9Router listener detection needs an `lsof`/`netstat` fallback; Linux-only `ss` checks can incorrectly report “not running”.
 - OpenCode worker preset: starts near port `18924`
+- OpenCode is configured with an explicit `9router` OpenAI-compatible provider from the live `GET /v1/models` response; the built-in `openai` provider is disabled so the worker does not expose or fall back to OpenAI.
 - OpenWork worker preset: starts near port `18945` for the web UI and uses the next port for its server. It passes `OPENAI_BASE_URL=http://127.0.0.1:20128/v1`, `OPENAI_API_KEY`, and `OPENCODE_MODEL=opencode/big-pickle` through to managed OpenCode, plus the current public host in `VITE_ALLOWED_HOSTS` for agentsweb access.
 - Agent Zero worker preset: starts near port `18955`, clones `agent0ai/agent-zero` to `~/agent-zero`, creates `.venv`, installs `requirements.txt`, and runs `python run_ui.py` directly on the worker. It writes `~/agent-zero-usr/plugins/_model_config/presets.yaml` so chat and utility use 9Router at `http://127.0.0.1:20128/v1`; do not run this preset in Docker on workers.
 

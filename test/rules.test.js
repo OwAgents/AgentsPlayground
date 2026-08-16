@@ -50,7 +50,7 @@ test('local mode keeps generated rules empty and writes canonical user rules', (
   const saved = service.save('Always verify the result.\n');
   assert.equal(saved.deployed, false);
   assert.equal(saved.generated, '');
-  assert.equal(saved.content, 'Always verify the result.\n');
+  assert.equal(saved.content, 'Always verify the result.');
   assert.equal(fs.readFileSync(path.join(homeDir, '.worker-agents', 'Rules.md'), 'utf8'), saved.content);
 });
 
@@ -74,7 +74,15 @@ test('custom homes inject supported adapters, deduplicate OpenCode and OpenWork,
   fs.mkdirSync(env.AGENT_ZERO_DIR, { recursive: true });
   fs.writeFileSync(path.join(env.AGENT_ZERO_DIR, 'run_ui.py'), '');
   const service = createRulesService({ homeDir, projectRoot, env, commandExists: () => false });
-  const payload = service.save('User rule');
+  const payload = service.save('', true, [
+    { id: 'shared', title: 'Shared agent instructions', content: '', enabled: true },
+    { id: 'custom', title: 'Custom checks', content: 'User rule', enabled: true },
+    { id: 'disabled', title: 'Disabled checks', content: 'Never inject this', enabled: false }
+  ]);
+  assert.match(payload.generated, /^Dashboard https:\/\/worker-test-worker-agents-1456\.agentsweb\.space\//);
+  assert.match(payload.content, /## Custom checks\n\nUser rule/);
+  assert.doesNotMatch(payload.effective, /Never inject this/);
+  assert.equal(payload.includeDeploymentRules, true);
   for (const id of ['codex', 'opencode', 'openwork', 'hermes', 'openclaw', 'deepseek']) {
     const report = payload.adapters.find((item) => item.id === id);
     assert.equal(report.injected, true, id);

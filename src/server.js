@@ -538,7 +538,7 @@ async function handleRequest(req, res) {
   if (url.pathname === '/api/rules' && req.method === 'PUT') {
     try {
       const body = await readJsonBody(req);
-      sendJson(res, 200, rulesService.save(body.content));
+      sendJson(res, 200, rulesService.save(body.content, body.includeDeploymentRules, body.sections));
     } catch (error) {
       sendJson(res, 400, { ok: false, error: error.message || 'Rules save failed.' });
     }

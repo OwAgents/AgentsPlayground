@@ -17,8 +17,11 @@ export type RuleAdapter = {
   reason: string | null; error: string | null
 }
 
+export type RuleSection = { id: string; title: string; content: string; enabled: boolean; removable: boolean }
+
 export type RulesPayload = {
-  ok: boolean; rulesPath: string; content: string; generated: string; effective: string; deployed: boolean;
+  ok: boolean; rulesPath: string; content: string; generated: string; effective: string; deployed: boolean; includeDeploymentRules: boolean;
+  sections: RuleSection[];
   deployment: { publicUrl: string; workerHostPrefix: string; workerBaseHost: string; fileBrowserUrl: string } | null;
   adapters: RuleAdapter[]
 }
