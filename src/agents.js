@@ -339,33 +339,32 @@ async function ensureHermesInstalled(port, log) {
 
 function defaultHermesWebUiCommand(port) {
   const hermesWebUiDir = process.env.HERMES_WEBUI_DIR || path.join(os.homedir(), 'hermes-webui');
-  const gatewayCheck = 'if [ ! -x /usr/local/lib/hermes-agent/venv/bin/python ]; then exit 1; fi; /usr/local/lib/hermes-agent/venv/bin/python -c "import sys; import gateway.status as s; sys.exit(0 if s.get_running_pid(cleanup_stale=False) else 1)"';
-  const gatewayPrefix = [
-    'if [ "${HERMES_WEBUI_START_GATEWAY:-1}" = "1" ] || [ "${HERMES_WEBUI_START_GATEWAY:-1}" = "true" ] || [ "${HERMES_WEBUI_START_GATEWAY:-1}" = "yes" ]; then ',
-    `if ! ${gatewayCheck} >/dev/null 2>&1; then `,
-    'gateway_bin="$(command -v hermes || true)"; ',
-    'if [ -z "$gateway_bin" ]; then for candidate in "$HOME/.hermes/hermes-agent/venv/bin/hermes" "$HOME/.hermes/hermes-agent/hermes" "$HOME/.hermes/bin/hermes" "$HOME/.local/bin/hermes" "$HOME/.local/share/hermes/bin/hermes"; do if [ -x "$candidate" ]; then gateway_bin="$candidate"; break; fi; done; fi; ',
-    'if [ -z "$gateway_bin" ]; then echo "Hermes gateway executable not found on PATH"; exit 1; fi; ',
-    'gateway_log="${HERMES_WEBUI_GATEWAY_LOG:-${HERMES_HOME:-$HOME/.hermes}/gateway.log}"; ',
-    'mkdir -p "$(dirname "$gateway_log")"; ',
-    'nohup "$gateway_bin" gateway run </dev/null >> "$gateway_log" 2>&1 & ',
-    'fi; ',
-    'fi; '
-  ].join('');
   if (process.platform === 'win32' && fs.existsSync(path.join(hermesWebUiDir, 'start.ps1'))) {
     return `powershell -NoProfile -ExecutionPolicy Bypass -File "${path.join(hermesWebUiDir, 'start.ps1')}" -Port ${port} -BindHost 0.0.0.0`;
   }
   if (fs.existsSync(path.join(hermesWebUiDir, 'bootstrap.py'))) {
-    return `${shellBin} -lc '${gatewayPrefix}cd "${hermesWebUiDir}" && exec python3 bootstrap.py --skip-agent-install --no-browser --foreground --host 0.0.0.0 ${port}'`;
+    return `${shellBin} -lc 'cd "${hermesWebUiDir}" && exec python3 bootstrap.py --skip-agent-install --no-browser --foreground --host 0.0.0.0 ${port}'`;
   }
   const webui = `exec /usr/local/bin/hermes-webui --skip-agent-install --no-browser --foreground --host 0.0.0.0 ${port}`;
   return [
     `${shellBin} -lc `,
     '\'',
-    gatewayPrefix,
     webui,
     '\''
   ].join('');
+}
+
+async function ensureHermesGatewayStarted(log) {
+  if (process.platform === 'win32' || !['1', 'true', 'yes'].includes(String(process.env.HERMES_WEBUI_START_GATEWAY ?? '1').toLowerCase())) return;
+  const command = [
+    'gateway_bin="$(command -v hermes || true)"; ',
+    'if [ -z "$gateway_bin" ]; then for candidate in "$HOME/.hermes/hermes-agent/venv/bin/hermes" "$HOME/.hermes/hermes-agent/hermes" "$HOME/.hermes/bin/hermes" "$HOME/.local/bin/hermes" "$HOME/.local/share/hermes/bin/hermes"; do if [ -x "$candidate" ]; then gateway_bin="$candidate"; break; fi; done; fi; ',
+    'if [ -z "$gateway_bin" ]; then echo "Hermes gateway executable not found"; exit 1; fi; ',
+    'gateway_log="${HERMES_WEBUI_GATEWAY_LOG:-${HERMES_HOME:-$HOME/.hermes}/gateway.log}"; mkdir -p "$(dirname "$gateway_log")"; ',
+    'nohup "$gateway_bin" gateway run </dev/null >> "$gateway_log" 2>&1 &'
+  ].join('');
+  await runCommand(command, { onData: log });
+  log('[hermes-webui] Hermes gateway launch requested');
 }
 
 
@@ -1013,6 +1012,7 @@ const builtInDefinitions = [
       await discoverRouterModels(log);
       ensureHermesRouterConfig();
       await ensureHermesInstalled(18935, log);
+      await ensureHermesGatewayStarted(log);
       importCodexAuthForHermes();
     },
     env: (port) => buildBaseEnv({
