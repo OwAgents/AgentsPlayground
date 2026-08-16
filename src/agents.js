@@ -241,7 +241,7 @@ function openCodeConfig(models = liveRouterModels || [routerDefaultModel()]) {
         },
         models: Object.fromEntries(models.map((model) => {
           const openCodeModel = model.startsWith('oc/') ? model.slice(3) : model;
-          return [openCodeModel, { name: model, ...(model.startsWith('oc/') ? { modelID: model } : {}) }];
+          return [openCodeModel, { name: model, ...(model.startsWith('oc/') ? { id: model } : {}) }];
         }))
       }
     }
