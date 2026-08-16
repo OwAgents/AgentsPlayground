@@ -348,7 +348,7 @@ function defaultHermesWebUiCommand(port) {
     'if [ -z "$gateway_bin" ]; then echo "Hermes gateway executable not found on PATH"; exit 1; fi; ',
     'gateway_log="${HERMES_WEBUI_GATEWAY_LOG:-${HERMES_HOME:-$HOME/.hermes}/gateway.log}"; ',
     'mkdir -p "$(dirname "$gateway_log")"; ',
-    '"$gateway_bin" gateway run >> "$gateway_log" 2>&1 & ',
+    'nohup "$gateway_bin" gateway run </dev/null >> "$gateway_log" 2>&1 & ',
     'fi; ',
     'fi; '
   ].join('');
