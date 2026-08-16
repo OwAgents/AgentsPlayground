@@ -627,7 +627,7 @@ export async function start(log) {
     ensureOpenAccessSettings(log);
     return getStatus();
   }
-  if (startupPromise) return getStatus();
+  if (startupPromise) return await startupPromise;
   startupError = '';
   startupState = 'installing';
   startupPromise = new Promise((resolve, reject) => {
@@ -675,7 +675,7 @@ export async function start(log) {
       }
     }, 0);
   });
-  return getStatus();
+  return await startupPromise;
 }
 
 export function getStatus() {
