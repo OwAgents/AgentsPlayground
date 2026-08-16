@@ -213,6 +213,8 @@ function localhostAgentIdFromRequest(req) {
 }
 
 function encodedPortFromRequest(req) {
+  const routedPort = Number.parseInt(String(req.headers['x-agentsweb-target-port'] || ''), 10);
+  if (routedPort >= 1 && routedPort <= 65535) return routedPort;
   const rawHost = String(req.headers['x-forwarded-host'] || req.headers.host || '')
     .toLowerCase()
     .replace(/:\d+$/, '');
