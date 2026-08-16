@@ -8,12 +8,21 @@ import path from 'node:path';
 import { execSync, spawn } from 'node:child_process';
 import { config, defaultPath, nowIso, shellBin } from './config.js';
 import { importCodexAuthForHermes, refreshTokenIfNeeded } from './auth.js';
+import { reconcileRules } from './rules.js';
 
 const ANSI_ESCAPE = /\u001B\[[0-9;?]*[ -/]*[@-~]/g;
 const browserHost = process.env.AGENT_BROWSER_HOST || '127.0.0.1';
 
 function stripAnsi(line) {
   return String(line).replace(ANSI_ESCAPE, '');
+}
+
+function injectRulesAfterInstall(adapterId, log) {
+  const report = reconcileRules(adapterId).adapters.find((item) => item.id === adapterId);
+  if (!report) return;
+  if (report.error) log(`[rules] ${adapterId}: ${report.error}`);
+  else if (report.injected) log(`[rules] ${adapterId}: injected ${report.targetPath}`);
+  else if (report.skipped) log(`[rules] ${adapterId}: skipped (${report.reason})`);
 }
 
 function agentLogFileFor(agentId) {
@@ -934,6 +943,7 @@ const builtInDefinitions = [
     readyPatterns: [/http:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0):/i, /dsh web/i, /listening/i],
     beforeStart: async (_port, log) => {
       await ensureDeepSeekHarnessInstalled(log);
+      injectRulesAfterInstall('deepseek', log);
     },
     env: () => buildBaseEnv({
       NINE_ROUTER_API_KEY: routerApiKey(),
@@ -964,6 +974,7 @@ const builtInDefinitions = [
       await discoverRouterModels(log);
       ensureCodexWebUi9RouterConfig();
       ensureOpenClawPatch();
+      injectRulesAfterInstall('codex', log);
     },
     env: () => buildBaseEnv({
       CUSTOM_ENDPOINT_API_KEY: routerApiKey(),
@@ -987,6 +998,7 @@ const builtInDefinitions = [
     beforeStart: async (_port, log) => {
       await discoverRouterModels(log);
       await ensureGlobalPackage('opencode', 'opencode-ai', log);
+      injectRulesAfterInstall('opencode', log);
     },
     env: () => buildBaseEnv({
       OPENAI_BASE_URL: routerBaseUrl(),
@@ -1014,6 +1026,7 @@ const builtInDefinitions = [
       await ensureHermesInstalled(18935, log);
       await ensureHermesGatewayStarted(log);
       importCodexAuthForHermes();
+      injectRulesAfterInstall('hermes', log);
     },
     env: (port) => buildBaseEnv({
       HERMES_WEBUI_HOST: '0.0.0.0',
@@ -1039,6 +1052,7 @@ const builtInDefinitions = [
       await refreshTokenIfNeeded();
       await discoverRouterModels(log);
       await ensureOpenWorkInstalled(log);
+      injectRulesAfterInstall('openwork', log);
     },
     env: () => buildBaseEnv({
       OPENAI_BASE_URL: routerBaseUrl(),
@@ -1064,6 +1078,7 @@ const builtInDefinitions = [
       await discoverRouterModels(log);
       ensureAgentZeroConfig();
       await ensureAgentZeroInstalled(log);
+      injectRulesAfterInstall('agent-zero', log);
     },
     env: () => buildBaseEnv({
       OPENAI_API_KEY: routerApiKey(),
@@ -1087,6 +1102,7 @@ const builtInDefinitions = [
       ensureOpenClawConfig(port, models);
       await ensureOpenClawBaseline(log);
       ensureOpenClawPatch();
+      injectRulesAfterInstall('openclaw', log);
     },
     env: () => buildBaseEnv({
       UV_USE_IO_URING: '0',

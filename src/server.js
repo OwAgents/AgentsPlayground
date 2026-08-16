@@ -10,6 +10,7 @@ import { createLoginUrl, exchangeCodeForTokens, getAuthStatus, logout } from './
 import { supervisor } from './agents.js';
 import { ensureSshd, runSetup, getSetupStatus, onSetupEvent } from './setup.js';
 import { installSkill, listInstalledSkills, readInstalledSkill, searchSkills } from './skill-hub.js';
+import { rulesService } from './rules.js';
 
 const publicDir = path.join(config.projectRoot, 'public');
 const contentTypes = new Map([
@@ -529,6 +530,21 @@ async function handleRequest(req, res) {
     return;
   }
 
+  if (url.pathname === '/api/rules' && req.method === 'GET') {
+    sendJson(res, 200, rulesService.payload());
+    return;
+  }
+
+  if (url.pathname === '/api/rules' && req.method === 'PUT') {
+    try {
+      const body = await readJsonBody(req);
+      sendJson(res, 200, rulesService.save(body.content));
+    } catch (error) {
+      sendJson(res, 400, { ok: false, error: error.message || 'Rules save failed.' });
+    }
+    return;
+  }
+
   if (url.pathname === '/api/skills-hub/search' && req.method === 'GET') {
     try {
       sendJson(res, 200, { results: await searchSkills(url.searchParams.get('q')) });
@@ -656,6 +672,11 @@ try {
   runSetup().catch((error) => {
     console.error('[setup] Preflight error:', error.message);
   }).then(() => {
+  const rulesPayload = rulesService.inject();
+  for (const adapter of rulesPayload.adapters) {
+    if (adapter.error) console.warn(`[rules] ${adapter.id}: ${adapter.error}`);
+    else if (adapter.injected) console.log(`[rules] ${adapter.id}: injected ${adapter.targetPath}`);
+  }
   nineRouter.start(console.log).then((routerStatus) => {
     if (routerStatus.state === 'error' && !routerStatus.livePort) {
       console.warn('[9router] Background startup did not produce a live listener');
