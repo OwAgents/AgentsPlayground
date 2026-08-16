@@ -8,9 +8,8 @@ import { config, defaultPath } from './config.js';
 import * as nineRouter from './9router.js';
 import { createLoginUrl, exchangeCodeForTokens, getAuthStatus, logout } from './auth.js';
 import { supervisor } from './agents.js';
-import { ensureSshd, runSetup, getSetupStatus, onSetupEvent, syncSkills } from './setup.js';
+import { ensureSshd, runSetup, getSetupStatus, onSetupEvent } from './setup.js';
 import { installSkill, listInstalledSkills, readInstalledSkill, searchSkills } from './skill-hub.js';
-import { startFrpTunnel, stopFrpTunnel } from './frp-tunnels.js';
 
 const publicDir = path.join(config.projectRoot, 'public');
 const contentTypes = new Map([
@@ -421,8 +420,6 @@ async function handleAgentAction(req, res, pathname) {
         action === 'restart' ? await nineRouter.restart(console.log)
         : action === 'stop' ? await nineRouter.stop(console.log)
         : await nineRouter.start(console.log);
-      if (action === 'stop') stopFrpTunnel(result.agent?.port);
-      else if (result.agent?.port) startFrpTunnel(result.agent.port, console.log);
       sendJson(res, 200, { ok: true, agent: result.agent, router: result });
     } catch (error) {
       sendJson(res, 400, { ok: false, error: error.message });
@@ -515,16 +512,6 @@ async function handleRequest(req, res) {
       sendHtml(res, 200, '<!doctype html><meta charset="utf-8"><title>Signed in</title><script>location.href="/?dashboard=1"</script><p>Signed in. Returning to the console.</p>');
     } catch (error) {
       sendHtml(res, 500, `<!doctype html><meta charset="utf-8"><title>Login failed</title><p>Login failed: ${escapeHtml(error.message)}</p><p><a href="/">Return to console</a></p>`);
-    }
-    return;
-  }
-
-  if (url.pathname === '/api/skills/update' && req.method === 'POST') {
-    try {
-      const result = await syncSkills();
-      sendJson(res, 200, { ok: result.ok, error: result.err || null, changed: result.changed || false, summary: result.summary || '' });
-    } catch (error) {
-      sendJson(res, 500, { ok: false, error: error.message });
     }
     return;
   }
@@ -662,8 +649,6 @@ try {
     console.error('[setup] Preflight error:', error.message);
   }).then(() => {
   nineRouter.start(console.log).then((routerStatus) => {
-    const routerPort = routerStatus.agent?.port || routerStatus.livePort;
-    if (routerPort) startFrpTunnel(routerPort, console.log);
     if (routerStatus.state === 'error' && !routerStatus.livePort) {
       console.warn('[9router] Background startup did not produce a live listener');
     }

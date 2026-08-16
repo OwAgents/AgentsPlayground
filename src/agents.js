@@ -8,7 +8,6 @@ import path from 'node:path';
 import { execSync, spawn } from 'node:child_process';
 import { config, defaultPath, nowIso, shellBin } from './config.js';
 import { importCodexAuthForHermes, refreshTokenIfNeeded } from './auth.js';
-import { startFrpTunnel, stopFrpTunnel } from './frp-tunnels.js';
 
 const ANSI_ESCAPE = /\u001B\[[0-9;?]*[ -/]*[@-~]/g;
 const browserHost = process.env.AGENT_BROWSER_HOST || '127.0.0.1';
@@ -1202,7 +1201,6 @@ class AgentRuntime {
     this.state = 'running';
     this.error = '';
     this.startedAt ||= nowIso();
-    startFrpTunnel(this.port, (line) => this.log(line));
     this.notify({ type: 'state', agentId: this.definition.id });
   }
 
@@ -1286,7 +1284,6 @@ class AgentRuntime {
       child.once('exit', (code, signal) => {
         const wasStopping = this.state === 'stopping';
         this.process = null;
-        stopFrpTunnel(this.port);
         this.pid = null;
         const path = this.definition.readyPath ?? this.definition.path ?? '/';
         const readyUrl = `http://127.0.0.1:${this.port}${path}`;
@@ -1383,7 +1380,6 @@ class AgentRuntime {
       return this.snapshot();
     }
     const child = this.process;
-    stopFrpTunnel(this.port);
     this.state = 'stopping';
     this.log('Stopping...');
     this.notify({ type: 'state', agentId: this.definition.id });

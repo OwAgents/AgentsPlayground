@@ -5,7 +5,6 @@ import { defaultPath, shellBin } from './config.js';
 
 const STEPS = [
   { id: 'tmpdirs', label: 'Creating temp directories' },
-  { id: 'skills', label: 'Installing shared skills from GitHub' },
   { id: 'verify', label: 'Verifying worker tools' },
 ];
 
@@ -51,54 +50,8 @@ async function stepTmpdirs() {
   return { changed: false };
 }
 
-const SKILLS_REPO = process.env.WORKER_AGENTS_SKILLS_REPO || 'https://github.com/phaneron23/skills.git';
-const SKILLS_BRANCH = String(process.env.WORKER_AGENTS_SKILLS_BRANCH || '').trim();
-const SKILLS_DIR = process.env.WORKER_AGENTS_SKILLS_DIR || path.join(process.env.HOME || '/tmp', '.worker-agents', 'skills');
 const STATE_DIR = process.env.WORKER_AGENTS_STATE_DIR || path.join(process.env.HOME || '/tmp', '.worker-agents');
 const STATE_PATH = path.join(STATE_DIR, 'state.json');
-
-function parseGitPullSummary(output) {
-  const lines = output.split('\n').map((line) => line.trim()).filter(Boolean);
-  const changeLine = lines.find((line) => /\d+\s+files?\s+changed/i.test(line));
-  if (changeLine) return { changed: true, text: changeLine };
-  if (lines.find((line) => /already up[- ]to[- ]date/i.test(line))) return { changed: false, text: 'Already up to date.' };
-  return { changed: true, text: lines.find((line) => !line.startsWith('remote:')) || 'Synced from GitHub.' };
-}
-
-function trySyncOnce(sharedSkillsDir = SKILLS_DIR) {
-  return new Promise((resolve) => {
-    ensureDir(path.dirname(sharedSkillsDir));
-    const isCloned = fs.existsSync(path.join(sharedSkillsDir, '.git'));
-    const cloneBranch = SKILLS_BRANCH ? ` --branch "${SKILLS_BRANCH}"` : '';
-    const cmd = isCloned
-      ? `cd "${sharedSkillsDir}" && git pull --ff-only`
-      : `git clone${cloneBranch} --depth 1 "${SKILLS_REPO}" "${sharedSkillsDir}"`;
-    const child = spawn(shellBin, ['-lc', cmd], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 120_000,
-      env: { ...process.env, PATH: defaultPath },
-    });
-    let out = '';
-    let err = '';
-    child.stdout.on('data', (d) => { out += d; });
-    child.stderr.on('data', (d) => { err += d; });
-    child.on('error', (e) => resolve({ ok: false, err: e.message }));
-    child.on('exit', (code) => {
-      if (code !== 0) {
-        resolve({ ok: false, err: err.trim() || out.trim() || `git exited ${code}` });
-        return;
-      }
-      const summary = isCloned ? parseGitPullSummary(`${out}\n${err}`) : { changed: true, text: 'Cloned from GitHub.' };
-      resolve({ ok: true, changed: summary.changed, summary: summary.text });
-    });
-  });
-}
-
-async function stepSkills() {
-  const result = await trySyncOnce();
-  if (!result.ok) throw new Error(result.err || 'skill sync failed');
-  return { changed: result.changed, summary: result.summary };
-}
 
 function readStateLinks() {
   try {
@@ -121,10 +74,6 @@ export function refreshAgentsLinks() {
   };
 }
 
-export async function syncSkills() {
-  return trySyncOnce();
-}
-
 async function stepVerify() {
   const checks = {};
   for (const bin of ['node', 'git']) {
@@ -142,7 +91,7 @@ async function stepVerify() {
   return { changed: false, checks };
 }
 
-const STEP_FNS = { tmpdirs: stepTmpdirs, skills: stepSkills, verify: stepVerify };
+const STEP_FNS = { tmpdirs: stepTmpdirs, verify: stepVerify };
 
 export async function runSetup() {
   if (state.done || state.running) return getSetupStatus();
