@@ -10,6 +10,7 @@ import { createLoginUrl, exchangeCodeForTokens, getAuthStatus, logout } from './
 import { supervisor } from './agents.js';
 import { ensureSshd, runSetup, getSetupStatus, onSetupEvent, syncSkills } from './setup.js';
 import { installSkill, listInstalledSkills, readInstalledSkill, searchSkills } from './skill-hub.js';
+import { startFrpTunnel, stopFrpTunnel } from './frp-tunnels.js';
 
 const publicDir = path.join(config.projectRoot, 'public');
 const contentTypes = new Map([
@@ -420,6 +421,8 @@ async function handleAgentAction(req, res, pathname) {
         action === 'restart' ? await nineRouter.restart(console.log)
         : action === 'stop' ? await nineRouter.stop(console.log)
         : await nineRouter.start(console.log);
+      if (action === 'stop') stopFrpTunnel(result.agent?.port);
+      else if (result.agent?.port) startFrpTunnel(result.agent.port, console.log);
       sendJson(res, 200, { ok: true, agent: result.agent, router: result });
     } catch (error) {
       sendJson(res, 400, { ok: false, error: error.message });
@@ -659,6 +662,8 @@ try {
     console.error('[setup] Preflight error:', error.message);
   }).then(() => {
   nineRouter.start(console.log).then((routerStatus) => {
+    const routerPort = routerStatus.agent?.port || routerStatus.livePort;
+    if (routerPort) startFrpTunnel(routerPort, console.log);
     if (routerStatus.state === 'error' && !routerStatus.livePort) {
       console.warn('[9router] Background startup did not produce a live listener');
     }
