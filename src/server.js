@@ -226,13 +226,19 @@ function encodedPortFromRequest(req) {
   return port >= 1 && port <= 65535 ? port : 0;
 }
 
+function encodedOriginalHost(req, port) {
+  const original = String(req.headers['x-agentsweb-original-host'] || '').trim().toLowerCase();
+  if (original && original.endsWith(`-${port}.agentsweb.space`) && !original.includes(':')) return original;
+  return `127.0.0.1:${port}`;
+}
+
 function proxyPortHttp(req, res, port) {
   const upstream = http.request({
     hostname: '127.0.0.1',
     port,
     method: req.method,
     path: req.url,
-    headers: { ...req.headers, host: `127.0.0.1:${port}` }
+    headers: { ...req.headers, host: encodedOriginalHost(req, port) }
   }, (upstreamRes) => {
     res.writeHead(upstreamRes.statusCode || 502, upstreamRes.headers);
     upstreamRes.pipe(res);
@@ -243,7 +249,7 @@ function proxyPortHttp(req, res, port) {
 
 function proxyPortUpgrade(req, socket, port) {
   const upstream = net.connect(port, '127.0.0.1', () => {
-    const lines = [`GET ${req.url || '/'} HTTP/1.1`, `Host: 127.0.0.1:${port}`];
+    const lines = [`GET ${req.url || '/'} HTTP/1.1`, `Host: ${encodedOriginalHost(req, port)}`];
     for (const [key, value] of Object.entries(req.headers)) {
       if (!value || key.toLowerCase() === 'host') continue;
       for (const item of Array.isArray(value) ? value : [value]) lines.push(`${key}: ${item}`);
