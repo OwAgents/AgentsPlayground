@@ -18,7 +18,7 @@ function fixture() {
 test('renders only valid agentsweb deployment context with encoded HTTPS children', () => {
   assert.equal(deploymentContext('http://localhost:1456'), null);
   assert.equal(deploymentContext('https://example.com'), null);
-  const context = deploymentContext('http://guest-demo-1786845105-worker-agents.agentsweb.space:1456');
+  const context = deploymentContext('https://guest-demo-1786845105-worker-agents-1456.agentsweb.space');
   assert.deepEqual(context, {
     publicUrl: 'https://guest-demo-1786845105-worker-agents-1456.agentsweb.space/',
     workerHostPrefix: 'guest-demo-1786845105',
