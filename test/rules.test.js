@@ -23,12 +23,23 @@ test('renders only valid agentsweb deployment context with encoded HTTPS childre
     publicUrl: 'https://guest-demo-1786845105-worker-agents-1456.agentsweb.space/',
     workerHostPrefix: 'guest-demo-1786845105',
     workerBaseHost: 'guest-demo-1786845105-worker-agents.agentsweb.space',
+    workerChildHostPrefix: 'guest-demo-1786845105-worker-agents',
     fileBrowserUrl: 'https://guest-demo-1786845105-worker-agents-18965.agentsweb.space'
   });
   const rendered = renderRulesTemplate('{{WORKER_PUBLIC_URL}} {{WORKER_HOST_PREFIX}} {{FILE_BROWSER_URL}}', context);
   assert.match(rendered, /^https:\/\//);
   assert.match(rendered, /guest-demo-1786845105/);
   assert.match(rendered, /-18965\.agentsweb\.space$/);
+});
+
+test('renders simple static a2 and dev deployment hosts', () => {
+  for (const name of ['a2', 'dev']) {
+    const context = deploymentContext(`https://${name}-1456.agentsweb.space`);
+    assert.equal(context.workerHostPrefix, name);
+    assert.equal(context.workerChildHostPrefix, name);
+    assert.equal(context.publicUrl, `https://${name}-1456.agentsweb.space/`);
+    assert.equal(context.fileBrowserUrl, `https://${name}-18965.agentsweb.space`);
+  }
 });
 
 test('managed rules stay at the top, replace idempotently, and preserve existing content', () => {

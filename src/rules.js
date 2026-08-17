@@ -52,9 +52,12 @@ export function deploymentContext(publicUrl) {
     const suffix = '.agentsweb.space';
     const hostname = parsed.hostname.toLowerCase();
     if (!hostname.endsWith(suffix)) return null;
-    const encodedBase = hostname.slice(0, -suffix.length).replace(/-\d+$/, '');
-    if (!encodedBase.endsWith('-worker-agents')) return null;
-    const workerHostPrefix = encodedBase.slice(0, -'-worker-agents'.length);
+    const encodedHost = hostname.slice(0, -suffix.length);
+    const encodedBase = encodedHost.replace(/-\d+$/, '');
+    if (!encodedBase || encodedBase.includes('.')) return null;
+    const workerHostPrefix = encodedBase.endsWith('-worker-agents')
+      ? encodedBase.slice(0, -'-worker-agents'.length)
+      : encodedBase;
     if (!workerHostPrefix) return null;
     const dashboardUrl = `https://${encodedBase}-1456${suffix}/`;
     const fileBrowserUrl = `https://${encodedBase}-18965${suffix}`;
@@ -62,6 +65,7 @@ export function deploymentContext(publicUrl) {
       publicUrl: dashboardUrl,
       workerHostPrefix,
       workerBaseHost: `${encodedBase}${suffix}`,
+      workerChildHostPrefix: encodedBase,
       fileBrowserUrl
     };
   } catch {
@@ -74,6 +78,7 @@ export function renderRulesTemplate(template, context) {
   return String(template || '')
     .replaceAll('{{WORKER_PUBLIC_URL}}', context.publicUrl)
     .replaceAll('{{WORKER_HOST_PREFIX}}', context.workerHostPrefix)
+    .replaceAll('{{WORKER_CHILD_HOST_PREFIX}}', context.workerChildHostPrefix || context.workerHostPrefix)
     .replaceAll('{{FILE_BROWSER_URL}}', context.fileBrowserUrl)
     .trim();
 }
