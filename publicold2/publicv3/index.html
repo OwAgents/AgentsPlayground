@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f3f5f7">
+    <title>WorkerAgents</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">
+        <span class="brand-mark">W</span>
+        <div>
+          <h1>WorkerAgents</h1>
+          <p id="workerName" data-worker-name>Worker</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <span class="chip" id="connectionChip"><i class="dot"></i><span id="connectionState">Connecting</span></span>
+        <span class="count" id="agentCount">0 agents</span>
+        <a class="btn ghost" href="#logs">Logs</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="agents" id="agentGrid" aria-live="polite"></section>
+
+      <section class="logs" id="logs">
+        <div class="logs-head">
+          <div>
+            <p class="eyebrow">Runtime output</p>
+            <h2 id="logTitle">No agent selected</h2>
+          </div>
+          <select id="logSelect" aria-label="Select log stream"></select>
+        </div>
+        <pre id="logOutput">No activity yet.</pre>
+      </section>
+    </main>
+
+    <footer>
+      <span>WorkerAgents</span>
+      <span id="buildVersion"></span>
+    </footer>
+    <script src="./app.js"></script>
+  </body>
+</html>

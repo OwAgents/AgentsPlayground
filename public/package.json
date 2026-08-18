@@ -1,0 +1,19 @@
+{
+  "name": "worker-agents-public-v3",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vue-tsc -b && cp source.html index.html && vite build && cp dist/index.html ./index.html && cp -R dist/assets/. ./assets/",
+    "dev": "vite --host 0.0.0.0",
+    "typecheck": "vue-tsc -b"
+  },
+  "dependencies": {
+    "@vitejs/plugin-vue": "6.0.1",
+    "tailwindcss": "4.1.14",
+    "@tailwindcss/vite": "4.1.14",
+    "typescript": "5.9.3",
+    "vite": "7.1.7",
+    "vue": "3.5.22",
+    "vue-tsc": "3.1.1"
+  }
+}

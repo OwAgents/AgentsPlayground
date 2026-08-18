@@ -1,0 +1,2 @@
+Hello! This is a sample text file created to test the editor functionality in File Browser.
+You can edit this file live in the web browser!
