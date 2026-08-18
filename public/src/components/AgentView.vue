@@ -40,6 +40,7 @@
             <div class="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
               <button class="action" :disabled="isBusy(agent) || agent.state === 'running'" @click="act(agent, 'start')">Start</button>
               <button class="action" :disabled="isBusy(agent) || isGuestDemo" @click="act(agent, 'restart')">Restart</button>
+              <button class="action" :disabled="isBusy(agent) || isGuestDemo" @click="act(agent, 'reinstall')">Reinstall</button>
               <button class="action text-rose-600" :disabled="isBusy(agent) || !canStop(agent) || isGuestDemo" @click="act(agent, 'stop')">Stop</button>
               <button class="action ml-auto" @click="selectLogs(agent)">View logs</button>
             </div>

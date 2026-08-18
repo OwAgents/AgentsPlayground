@@ -321,9 +321,12 @@ async function ensureDeepSeekHarnessSettings(log) {
 
 async function ensureDeepSeekHarnessInstalled(log) {
   const dir = deepSeekHarnessDir();
-  const pnpm = 'npx --yes pnpm@9';
+  // The dev image has Node 20 at /opt/node20 while the system npx wrapper is
+  // tied to the older distro Node. Invoke npx through the running Node binary
+  // so reinstall/build uses the same runtime as Worker Agents.
+  const pnpm = `PNPM_CLI="$(find ${shellQuote(path.join(os.homedir(), '.npm', '_npx'))} -path '*/pnpm/bin/pnpm.cjs' -print -quit)"; if [ -z "$PNPM_CLI" ]; then ${shellQuote(process.execPath)} /usr/bin/npx --yes pnpm@9 --version >/dev/null; PNPM_CLI="$(find ${shellQuote(path.join(os.homedir(), '.npm', '_npx'))} -path '*/pnpm/bin/pnpm.cjs' -print -quit)"; fi; export PATH="$(dirname "$PNPM_CLI")/../../.bin:$PATH"; ${shellQuote(process.execPath)} "$PNPM_CLI"`;
   if (!fs.existsSync(path.join(dir, 'package.json'))) {
-    await runCommand(`export PATH=/usr/local/bin:$PATH && rm -rf ${shellQuote(dir)} && git clone --depth 1 https://github.com/deepseek-ai/deepseek-harness.git ${shellQuote(dir)}`, { onData: log });
+    await runCommand(`export PATH=${shellQuote(defaultPath)} && rm -rf ${shellQuote(dir)} && git clone --depth 1 https://github.com/deepseek-ai/deepseek-harness.git ${shellQuote(dir)}`, { onData: log });
   }
   const trustSource = path.join(dir, 'packages/client/connection/src/index.ts');
   if (fs.existsSync(trustSource)) {
@@ -336,18 +339,25 @@ async function ensureDeepSeekHarnessInstalled(log) {
   }
   const buildMarker = path.join(dir, '.worker-agents-built');
   if (!fs.existsSync(buildMarker)) {
-    await runCommand(`export PATH=/usr/local/bin:$PATH && cd ${shellQuote(dir)} && ${pnpm} install --no-frozen-lockfile && ${pnpm} build`, { onData: log });
+    await runCommand(`export PATH=${shellQuote(defaultPath)} && cd ${shellQuote(dir)} && ${pnpm} add -Dw unrun --ignore-scripts && ${pnpm} install --no-frozen-lockfile --ignore-scripts && ${shellQuote(process.execPath)} /usr/bin/npm run build`, { onData: log });
     fs.writeFileSync(buildMarker, `${new Date().toISOString()}\n`);
   }
   await ensureDeepSeekHarnessSettings(log);
   return dir;
 }
 
+async function freshInstallDeepSeek(log) {
+  const dir = deepSeekHarnessDir();
+  await runCommand(`rm -rf ${shellQuote(dir)}`, { onData: log });
+  log(`[deepseek-harness] removed ${dir} for fresh reinstall`);
+}
+
 function defaultDeepSeekHarnessCommand(port) {
   const dir = deepSeekHarnessDir();
   const trustedHost = deepSeekHarnessPublicHost(port);
   if (!trustedHost) throw new Error('DeepSeek Harness requires the Worker Agents public agentsweb hostname');
-  return `export PATH=/usr/local/bin:$PATH && cd ${shellQuote(dir)} && exec npx --yes pnpm@9 dsh web --host 127.0.0.1 --port ${port} --trusted-host ${shellQuote(trustedHost)}`;
+  const npxRoot = path.join(os.homedir(), '.npm', '_npx');
+  return `export PATH=${shellQuote(defaultPath)} && cd ${shellQuote(dir)} && PNPM_CLI="$(find ${shellQuote(npxRoot)} -path '*/pnpm/bin/pnpm.cjs' -print -quit)" && test -n "$PNPM_CLI" && export PATH="$(dirname "$PNPM_CLI")/../../.bin:$PATH" && exec ${shellQuote(process.execPath)} "$PNPM_CLI" dsh web --host 127.0.0.1 --port ${port} --trusted-host ${shellQuote(trustedHost)}`;
 }
 
 function ensureHermesRouterConfig(port = routerPort()) {
@@ -1029,6 +1039,7 @@ const builtInDefinitions = [
       port
     ),
     readyPatterns: [/http:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0):/i, /dsh web/i, /listening/i],
+    beforeReinstall: freshInstallDeepSeek,
     beforeStart: async (_port, log) => {
       await ensureDeepSeekHarnessInstalled(log);
       injectRulesAfterInstall('deepseek', log);
@@ -1053,6 +1064,11 @@ const builtInDefinitions = [
       port
     ),
     readyPatterns: [/http:\/\/(localhost|127\.0\.0\.1):/i, /listening/i],
+    beforeReinstall: async (log) => {
+      await runCommand('npm uninstall -g codexapp', { onData: log }).catch(() => {});
+      await runCommand(`rm -f ${shellQuote(path.join(config.codexHome, 'webui-custom-providers.json'))} ${shellQuote(path.join(config.codexHome, 'config.toml'))}`, { onData: log });
+      log('[codex] removed installed package and generated configuration for fresh reinstall');
+    },
     beforeStart: async (_port, log) => {
       await refreshTokenIfNeeded();
       await ensureGlobalPackage('codexapp', 'codexapp', log);
@@ -1342,7 +1358,7 @@ class AgentRuntime {
     }
   }
 
-  async start() {
+  async start(options = {}) {
     if (this.state === 'running' || this.state === 'starting' || this.state === 'installing') return this.snapshot();
     this.state = 'installing';
     this.error = '';
@@ -1355,13 +1371,19 @@ class AgentRuntime {
         const lines = String(chunk).split(/\r?\n/);
         for (const line of lines) if (line) this.log(line);
       });
+      if (options.reinstall) {
+        await this.definition.beforeReinstall?.((chunk) => {
+          const lines = String(chunk).split(/\r?\n/);
+          for (const line of lines) if (line) this.log(line);
+        });
+      }
       this.port = await findAvailablePort(this.definition.basePort);
       await this.definition.beforeStart?.(this.port, (chunk) => {
         const lines = String(chunk).split(/\r?\n/);
         for (const line of lines) {
           if (line) this.log(line);
         }
-      });
+      }, options);
       this.state = 'starting';
       this.notify({ type: 'state', agentId: this.definition.id });
       this.command = this.definition.command(this.port);
@@ -1553,6 +1575,11 @@ class AgentSupervisor extends EventEmitter {
   async restart(id) {
     await this.stop(id);
     return this.start(id);
+  }
+
+  async reinstall(id) {
+    await this.stop(id);
+    return this.get(id).start({ reinstall: true });
   }
 
   async startAll() {

@@ -9,7 +9,7 @@ import * as nineRouter from './9router.js';
 import { createLoginUrl, exchangeCodeForTokens, getAuthStatus, logout } from './auth.js';
 import { supervisor } from './agents.js';
 import { ensureSshd, runSetup, getSetupStatus, onSetupEvent } from './setup.js';
-import { installSkill, listInstalledSkills, readInstalledSkill, searchSkills } from './skill-hub.js';
+import { baselineStatus, installSkill, listInstalledSkills, readInstalledSkill, searchSkills } from './skill-hub.js';
 import { rulesService } from './rules.js';
 
 const publicDir = path.join(config.projectRoot, 'public');
@@ -420,7 +420,7 @@ function serveLaunchPage(res) {
 
 
 async function handleAgentAction(req, res, pathname) {
-  const match = pathname.match(/^\/api\/agents\/([^/]+)\/(start|stop|restart)$/);
+  const match = pathname.match(/^\/api\/agents\/([^/]+)\/(start|stop|restart|reinstall)$/);
   if (!match || req.method !== 'POST') return false;
   const [, id, action] = match;
   if (id === '__9router__') {
@@ -526,7 +526,7 @@ async function handleRequest(req, res) {
   }
 
   if (url.pathname === '/api/skills-hub' && req.method === 'GET') {
-    sendJson(res, 200, { installed: listInstalledSkills() });
+    sendJson(res, 200, { installed: listInstalledSkills(), baseline: baselineStatus(), setup: getSetupStatus() });
     return;
   }
 

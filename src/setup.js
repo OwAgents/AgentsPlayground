@@ -2,10 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { defaultPath, shellBin } from './config.js';
+import { baselineSkills, installSkill } from './skill-hub.js';
 
 const STEPS = [
   { id: 'tmpdirs', label: 'Creating temp directories' },
   { id: 'verify', label: 'Verifying worker tools' },
+  { id: 'skills', label: 'Installing baseline skills' },
 ];
 
 const state = {
@@ -91,7 +93,21 @@ async function stepVerify() {
   return { changed: false, checks };
 }
 
-const STEP_FNS = { tmpdirs: stepTmpdirs, verify: stepVerify };
+async function stepSkills() {
+  const results = [];
+  for (const skill of baselineSkills()) {
+    try {
+      const installed = await installSkill(skill.source, skill.name);
+      results.push({ name: skill.name, installed: true, path: installed.path });
+    } catch (error) {
+      if (skill.required !== false) throw error;
+      results.push({ name: skill.name, installed: false, skipped: true, error: error.message });
+    }
+  }
+  return { changed: results.some((result) => result.installed), skills: results };
+}
+
+const STEP_FNS = { tmpdirs: stepTmpdirs, verify: stepVerify, skills: stepSkills };
 
 export async function runSetup() {
   if (state.done || state.running) return getSetupStatus();
@@ -110,6 +126,7 @@ export async function runSetup() {
       const result = await STEP_FNS[stepDef.id]();
       state.steps[i].done = true;
       if (result.checks) state.checks = result.checks;
+      if (result.skills) state.skills = result.skills;
       console.log(`[setup] ${stepDef.label} — ${result.changed ? 'configured' : 'ok'}`);
     } catch (error) {
       state.steps[i].skipped = true;

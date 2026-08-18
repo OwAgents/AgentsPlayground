@@ -536,6 +536,11 @@ async function applyOpenAccessSettings(log) {
 
 function ensureOpenAccess(dbPath) {
   const routerPackagePath = findRouterPackagePath();
+  // Existing Linux workers may have native better-sqlite3 built for the
+  // distro Node that launched 9Router, while Worker Agents itself can run
+  // under a newer bundled Node. Keep the DB helper on the compatible runtime.
+  const databaseNode = process.env.ROUTER_DATABASE_NODE
+    || (process.platform === 'linux' && fs.existsSync('/usr/bin/node') ? '/usr/bin/node' : process.execPath);
   const settingsScript = `
 const { createRequire } = require('node:module');
 const requireFromRouter = createRequire(process.argv[1]);
@@ -567,7 +572,7 @@ if (verifiedData.requireApiKey !== false) {
 db.close();
 process.stdout.write(changed ? 'changed' : 'unchanged');
 `;
-  const result = execFileSync(process.execPath, [
+  const result = execFileSync(databaseNode, [
     '-e',
     settingsScript,
     routerPackagePath,
