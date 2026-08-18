@@ -24,13 +24,20 @@ test('launch uses only the Worker Agents-owned locked package', () => {
 
 test('source contains no global npm or source-build router fallback', () => {
   const source = fs.readFileSync(new URL('../src/9router.js', import.meta.url), 'utf8');
+  const setupSource = fs.readFileSync(new URL('../src/setup.js', import.meta.url), 'utf8');
+  const selfCheckSource = fs.readFileSync(new URL('../scripts/self-check.mjs', import.meta.url), 'utf8');
   const packageJson = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 
   assert.equal(packageJson.dependencies['9router-vibefin'], '0.5.51');
   assert.equal(packageJson.engines.node, '>=22');
   assert.equal(packageJson.scripts.postinstall, 'node scripts/prepare-owned-9router.mjs');
+  assert.equal(packageJson.scripts['self-check'], 'node scripts/self-check.mjs');
   assert.doesNotMatch(source, /npm root -g/);
   assert.doesNotMatch(source, /npm (?:i|install) -g/);
   assert.doesNotMatch(source, /WORKER_AGENTS_9ROUTER_DIR/);
   assert.doesNotMatch(source, /\.next[\\/]standalone[\\/]server\.js/);
+  assert.match(setupSource, /isRouterMiddlewarePatched/);
+  assert.doesNotMatch(setupSource, /\.sh(?:\W|$)|deploy-persistent|install-release/);
+  assert.match(selfCheckSource, /package-lock\.json/);
+  assert.match(selfCheckSource, /process\.execPath/);
 });

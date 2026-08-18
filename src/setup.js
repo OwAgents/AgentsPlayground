@@ -3,6 +3,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { defaultPath, shellBin } from './config.js';
 import { baselineSkills, installSkill } from './skill-hub.js';
+import { isRouterMiddlewarePatched, routerPackageMetadata } from './9router.js';
 
 const STEPS = [
   { id: 'tmpdirs', label: 'Creating temp directories' },
@@ -90,6 +91,23 @@ async function stepVerify() {
     });
     checks[bin] = result;
   }
+  const nodeMajor = Number.parseInt(process.versions.node.split('.')[0], 10);
+  if (!Number.isFinite(nodeMajor) || nodeMajor < 22) {
+    throw new Error(`Node.js 22+ required, found ${process.version} at ${process.execPath}`);
+  }
+  const router = routerPackageMetadata();
+  if (router.version !== '0.5.51') {
+    throw new Error(`Expected owned 9router-vibefin@0.5.51, found ${router.version || '<missing>'}`);
+  }
+  if (!isRouterMiddlewarePatched()) {
+    throw new Error('Owned 9Router middleware is not prepared; run npm ci');
+  }
+  checks.runtime = {
+    ok: true,
+    nodeVersion: process.version,
+    nodeExecutable: process.execPath,
+    router,
+  };
   return { changed: false, checks };
 }
 
@@ -131,6 +149,10 @@ export async function runSetup() {
     } catch (error) {
       state.steps[i].skipped = true;
       state.steps[i].error = error.message;
+      if (stepDef.id === 'verify') {
+        state.failed = true;
+        state.error = error.message;
+      }
       console.warn(`[setup] ${stepDef.label} — skipped: ${error.message}`);
     }
   }

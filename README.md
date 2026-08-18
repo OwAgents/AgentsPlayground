@@ -4,7 +4,7 @@
 
 ### One dashboard. Many agents. Zero terminal-tab archaeology. 🚀
 
-[![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white&style=for-the-badge)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white&style=for-the-badge)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white&style=for-the-badge)](Dockerfile)
 [![Status](https://img.shields.io/badge/Status-IT%20LIVES-brightgreen?style=for-the-badge)](#-quick-start)
 [![Stars](https://img.shields.io/github/stars/OpenWebAgents/workerAgents?style=for-the-badge&logo=github&color=gold)](https://github.com/OpenWebAgents/workerAgents/stargazers)
@@ -58,12 +58,20 @@ Yes, it launches agents. Yes, it has a File Browser and Web VNC. **Yes, the stop
 ## ⚡ Quick Start
 
 ```bash
-# 🔓 Release the tiny supervisors
-npm install
+# 🔓 Install the exact lockfile-owned runtime and validate it
+npm ci
+npm run self-check
 npm start
 ```
 
 Open [http://127.0.0.1:1456](http://127.0.0.1:1456). Congratulations: your terminal tabs may now unionize in peace.
+
+Worker Agents requires Node.js 22 or newer. `npm ci` installs the pinned local
+`9router-vibefin` package and runs its deterministic preparation hook.
+`npm run self-check` fails before startup when Node, the lockfile, the installed
+router, or the prepared middleware has drifted. Runtime `setup.js` repeats these
+checks and reports failures; it intentionally does not invoke privileged host
+deployment scripts or rewrite the running checkout.
 
 Override the port when `1456` has already been claimed by mysterious forces:
 
