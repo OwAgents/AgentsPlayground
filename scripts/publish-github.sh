@@ -17,26 +17,34 @@ wagit() {
   git --git-dir="$git_dir" --work-tree="$project_dir" "$@"
 }
 
-if [[ ! -d "$git_dir" ]]; then
-  mkdir -p "$git_dir"
-  wagit init --initial-branch=main
-fi
-
-wagit add --all
-if ! wagit diff --cached --quiet; then
-  wagit commit -m "$message"
-fi
-
 if ! gh repo view "$owner/$repo" >/dev/null 2>&1; then
   gh repo create "$owner/$repo" "--$visibility" \
     --description "🤖 One dashboard, many AI agents, zero terminal tab archaeology." \
     --disable-issues=false
 fi
 
+if [[ ! -d "$git_dir" ]]; then
+  mkdir -p "$git_dir"
+  wagit init --initial-branch=main
+fi
+
 if wagit remote get-url origin >/dev/null 2>&1; then
   wagit remote set-url origin "$remote"
 else
   wagit remote add origin "$remote"
+fi
+
+# A detached outer worktree may not contain the ignored .git2 metadata. Always
+# seed the independent index from the current public branch before snapshotting
+# this directory, so a fresh worktree produces a fast-forward commit rather
+# than an unrelated root history. The filesystem remains the source of truth.
+if wagit fetch --depth=1 origin main; then
+  wagit reset --mixed FETCH_HEAD >/dev/null
+fi
+
+wagit add --all
+if ! wagit diff --cached --quiet; then
+  wagit commit -m "$message"
 fi
 
 wagit push --set-upstream origin main

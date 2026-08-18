@@ -1,13 +1,13 @@
 <div align="center">
 
-# 🤖 Worker Agents https://agentsweb.space/guest
+# 🤖 Worker Agents
 
 ### One dashboard. Many agents. Zero terminal-tab archaeology. 🚀
 
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white&style=for-the-badge)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white&style=for-the-badge)](Dockerfile)
 [![Status](https://img.shields.io/badge/Status-IT%20LIVES-brightgreen?style=for-the-badge)](#-quick-start)
-[![Stars](https://img.shields.io/github/stars/replypaldevs/workerAgents?style=for-the-badge&logo=github&color=gold)](https://github.com/replypaldevs/workerAgents/stargazers)
+[![Stars](https://img.shields.io/github/stars/OpenWebAgents/workerAgents?style=for-the-badge&logo=github&color=gold)](https://github.com/OpenWebAgents/workerAgents/stargazers)
 
 > **Your AI agents demanded a mission-control room.**
 > **We gave them buttons, logs, health states, and just enough supervision to look responsible.**
@@ -26,7 +26,7 @@
 
 <div align="center">
 
-<img width="1268" height="1376" alt="image" src="https://github.com/user-attachments/assets/74e9d1d2-9fe0-492d-a47a-7c81040ba4f8" />
+<img src="docs/images/dashboard.jpg" alt="Worker Agents dashboard showing agent controls and live runtime states" width="555" />
 
 <sub>Real dashboard. Real runtime states. No actors were paid, although several agents requested API credits.</sub>
 
