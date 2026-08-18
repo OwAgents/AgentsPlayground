@@ -6,8 +6,18 @@ git_dir="$project_dir/.git2"
 owner=${GITHUB_OWNER:-replypaldevs}
 repo=${GITHUB_REPO:-workerAgents}
 visibility=${GITHUB_VISIBILITY:-public}
-message=${1:-"Publish Worker Agents"}
+mode=${1:-}
+message=${1:-}
 remote="https://github.com/$owner/$repo.git"
+
+if [[ "$mode" == "--require-clean" ]]; then
+  message=""
+elif [[ -z "$message" || "$message" != *$'\n\n'* ]]; then
+  echo "Usage: $0 --require-clean" >&2
+  echo "   or: $0 \$'Subject\\n\\nContext, rationale, changes, verification, and caveats'" >&2
+  echo "Explicit publish commits require a subject and multi-paragraph body." >&2
+  exit 2
+fi
 
 command -v git >/dev/null
 command -v gh >/dev/null
@@ -44,6 +54,13 @@ fi
 
 wagit add --all
 if ! wagit diff --cached --quiet; then
+  if [[ "$mode" == "--require-clean" ]]; then
+    echo "Worker Agents has unpublished standalone changes:" >&2
+    wagit diff --cached --name-status >&2
+    wagit reset >/dev/null
+    echo "Publish them explicitly with a detailed commit message before deployment." >&2
+    exit 1
+  fi
   wagit commit -m "$message"
 fi
 
