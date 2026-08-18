@@ -121,9 +121,6 @@ export async function installSkill(source, expectedName = '') {
 export async function removeSkill(name) {
   const cleanName = String(name || '').trim();
   if (!/^[A-Za-z0-9._-]+$/.test(cleanName)) throw new Error('Missing or invalid skill name.');
-  if (baselineSkills().some((skill) => skill.name === cleanName)) {
-    throw new Error(`${cleanName} is a required worker baseline skill and cannot be uninstalled.`);
-  }
   if (!listInstalledSkills().some((skill) => skill.name === cleanName)) {
     throw new Error(`${cleanName} is not installed.`);
   }
