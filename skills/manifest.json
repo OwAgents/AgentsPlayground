@@ -1,6 +1,0 @@
-{
-  "version": 1,
-  "skills": [
-    { "name": "mcp-duckgo", "source": "aahl/skills@mcp-duckgo", "required": true }
-  ]
-}

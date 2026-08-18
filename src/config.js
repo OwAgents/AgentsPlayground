@@ -62,7 +62,6 @@ export const defaultPath = (
         path.join(os.homedir(), '.local/bin'),
         path.join(os.homedir(), '.opencode/bin'),
         '/mingw64/bin',
-        '/opt/node20/bin',
         '/usr/bin',
         '/c/Program Files/nodejs',
         '/c/npm/prefix',

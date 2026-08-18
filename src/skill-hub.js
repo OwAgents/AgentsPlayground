@@ -7,7 +7,6 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 const SEARCH_TIMEOUT_MS = 60_000;
 const INSTALL_TIMEOUT_MS = 120_000;
-const BASELINE_MANIFEST_PATH = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'skills', 'manifest.json');
 
 function skillRoots() {
   const roots = [
@@ -52,18 +51,6 @@ export function listInstalledSkills() {
     }
   }
   return [...skills.values()].sort((a, b) => a.name.localeCompare(b.name));
-}
-
-export function baselineSkills() {
-  try {
-    const manifest = JSON.parse(fs.readFileSync(BASELINE_MANIFEST_PATH, 'utf8'));
-    return Array.isArray(manifest.skills) ? manifest.skills.map((skill) => ({ ...skill })) : [];
-  } catch { return []; }
-}
-
-export function baselineStatus() {
-  const installed = new Map(listInstalledSkills().map((skill) => [skill.name, skill]));
-  return baselineSkills().map((skill) => ({ ...skill, installed: installed.has(skill.name), path: installed.get(skill.name)?.path || '' }));
 }
 
 export function parseSkillSearchOutput(output, installedNames = new Set()) {

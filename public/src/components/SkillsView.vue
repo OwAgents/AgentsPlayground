@@ -9,7 +9,7 @@
         <div class="mb-8 rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-5 sm:p-6">
           <p class="text-xs font-medium text-emerald-700">SKILL HUB</p>
           <h2 class="mt-1 text-xl font-semibold tracking-tight text-slate-900">Give your agents new capabilities</h2>
-          <p class="mt-1 max-w-2xl text-sm text-slate-500">Search and install capabilities with npx skills. Baseline skills are preinstalled during worker setup.</p>
+          <p class="mt-1 max-w-2xl text-sm text-slate-500">Search the open skills ecosystem, inspect a result, and install it globally on this worker.</p>
           <form class="mt-5 flex gap-2" @submit.prevent="search">
             <div class="relative flex-1"><span class="absolute left-3 top-2.5 text-slate-400">⌕</span><input v-model="query" class="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none ring-emerald-500 focus:ring-2" placeholder="Search skills, e.g. browser automation" /></div>
             <button class="rounded-xl bg-slate-900 px-4 text-sm font-medium text-white hover:bg-black disabled:opacity-50" :disabled="searching || query.trim().length < 2">{{ searching ? 'Searching…' : 'Search' }}</button>
@@ -17,10 +17,6 @@
           <p v-if="error" class="mt-2 text-xs text-rose-600">{{ error }}</p>
         </div>
 
-        <section v-if="baseline.length" class="mb-9">
-          <div class="mb-3 flex items-center justify-between"><h3 class="text-sm font-semibold text-slate-800">Worker baseline</h3><span class="text-xs text-slate-400">Preinstalled by setup</span></div>
-          <div class="grid gap-3 sm:grid-cols-2"><SkillCard v-for="skill in baseline" :key="skill.name" :skill="skill" :show-owner="false" @select="open" /></div>
-        </section>
         <section v-if="results.length" class="mb-9">
           <div class="mb-3 flex items-center justify-between"><h3 class="text-sm font-semibold text-slate-800">Search results</h3><span class="text-xs text-slate-400">{{ results.length }} found</span></div>
           <div class="grid gap-3 sm:grid-cols-2"><SkillCard v-for="skill in results" :key="skill.source" :skill="merged(skill)" @select="open" /></div>
@@ -50,10 +46,10 @@ import { onMounted, ref } from 'vue'
 import type { Skill } from '../types'
 import SkillCard from './SkillCard.vue'
 defineEmits<{ 'open-menu': [] }>()
-const installed = ref<Skill[]>([]), baseline = ref<Skill[]>([]), results = ref<Skill[]>([]), query = ref(''), error = ref(''), toast = ref('')
+const installed = ref<Skill[]>([]), results = ref<Skill[]>([]), query = ref(''), error = ref(''), toast = ref('')
 const loading = ref(false), searching = ref(false), installing = ref(false), detail = ref<Skill | null>(null)
 function merged(skill: Skill) { const local = installed.value.find(item => item.name === skill.name); return local ? { ...skill, ...local, source: skill.source, url: skill.url || local.url } : skill }
-async function loadInstalled() { loading.value = true; try { const r = await fetch('/api/skills-hub'); const data = await r.json(); if (!r.ok) throw new Error(data.error); installed.value = data.installed || []; baseline.value = (data.baseline || []).map((skill: Skill) => ({ ...skill, displayName: skill.name.replace(/[-_]+/g, ' ').replace(/\b\w/g, (letter: string) => letter.toUpperCase()), owner: 'worker baseline' })) } catch (e) { error.value = e instanceof Error ? e.message : 'Failed to load skills.' } finally { loading.value = false } }
+async function loadInstalled() { loading.value = true; try { const r = await fetch('/api/skills-hub'); const data = await r.json(); if (!r.ok) throw new Error(data.error); installed.value = data.installed || [] } catch (e) { error.value = e instanceof Error ? e.message : 'Failed to load skills.' } finally { loading.value = false } }
 async function search() { searching.value = true; error.value = ''; try { const r = await fetch(`/api/skills-hub/search?q=${encodeURIComponent(query.value.trim())}`); const data = await r.json(); if (!r.ok) throw new Error(data.error); results.value = data.results || []; if (!results.value.length) toastFor('No matching skills found.') } catch (e) { error.value = e instanceof Error ? e.message : 'Search failed.' } finally { searching.value = false } }
 async function open(skill: Skill) { detail.value = skill; if (skill.installed) { try { const r = await fetch(`/api/skills-hub/readme?name=${encodeURIComponent(skill.name)}`); if (r.ok) detail.value = { ...skill, ...await r.json() } } catch {} } }
 async function install() { if (!detail.value?.source) return; installing.value = true; try { const r = await fetch('/api/skills-hub/install', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ source: detail.value.source, name: detail.value.name }) }); const data = await r.json(); if (!r.ok || !data.ok) throw new Error(data.error); await loadInstalled(); toastFor(`${detail.value.displayName || detail.value.name} installed`); detail.value = null } catch (e) { toastFor(e instanceof Error ? e.message : 'Installation failed.') } finally { installing.value = false } }
