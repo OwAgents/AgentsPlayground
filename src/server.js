@@ -420,7 +420,7 @@ function serveLaunchPage(res) {
 
 
 async function handleAgentAction(req, res, pathname) {
-  const match = pathname.match(/^\/api\/agents\/([^/]+)\/(start|stop|restart|reinstall)$/);
+  const match = pathname.match(/^\/api\/agents\/([^/]+)\/(start|stop|restart)$/);
   if (!match || req.method !== 'POST') return false;
   const [, id, action] = match;
   if (id === '__9router__') {
