@@ -9,15 +9,15 @@ Default local ports:
 
 ## Worker Agents launch notes
 
-- Worker Agents prefers the published npm CLI: `npm i -g 9router@latest --prefer-online`. The bootstrap installs it on first start and launches `$(npm root -g)/9router/app/server.js` (Next.js standalone bundled in the package), so no `git clone` or `npm run build` is needed on the worker.
+- Worker Agents uses the published `9router-vibefin` npm package. Bootstrap installs it when absent, resolves its exact `package.json`, and pins that package's `app/server.js` before changing the launch `PATH`; do not rediscover it later with `command -v 9router` or `npm root -g` because persistent workers can have `/usr`, `/usr/local`, `/opt/node20`, and `/opt/node22` npm prefixes at the same time.
 - If npm installation fails, startup fails clearly; there is no Git/source-build fallback.
-- Start the standalone server directly with:
+- For a manual package diagnostic, run the packaged server with the same modern Node runtime Worker Agents selects:
 
 ```bash
-node .next/standalone/server.js
+/opt/node22/bin/node /opt/node22/lib/node_modules/9router-vibefin/app/server.js
 ```
 
-- The standalone server path is resolved at bootstrap runtime from the npm global package locations.
+- Treat `/api/health` as process readiness only. The integration gate is a successful `GET /v1/models`, followed by a non-streaming `POST /v1/chat/completions`; an incompatible or damaged package can briefly return health before crashing when the database is first used.
 - On macOS, 9Router listener detection needs an `lsof`/`netstat` fallback; Linux-only `ss` checks can incorrectly report “not running”.
 - OpenCode worker preset: starts near port `18924`
 - OpenCode is configured with an explicit `9router` OpenAI-compatible provider from the live `GET /v1/models` response; the built-in `openai` provider is disabled so the worker does not expose or fall back to OpenAI.
