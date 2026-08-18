@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Generic Node.js control plane for running local agent workers.",
   "scripts": {
+    "postinstall": "node scripts/prepare-owned-9router.mjs",
     "start": "node src/server.js",
     "start:clean-9router": "lsof -tiTCP:20128 -sTCP:LISTEN 2>/dev/null | xargs -r kill -9; rm -rf \"$HOME/9router\" \"$HOME/.9router\" /tmp/9router.log && node src/server.js",
     "start:clean-opencode": "lsof -tiTCP:18924 -sTCP:LISTEN 2>/dev/null | xargs -r kill -9; npm uninstall -g opencode-ai || true; rm -rf \"$HOME/.opencode\" /tmp/agent-console-agent-opencode.log && node src/server.js",
@@ -18,6 +19,9 @@
     "start:windows:clean-all": "powershell -ExecutionPolicy Bypass -File ./scripts/start-windows.ps1 -CleanAll"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
+  },
+  "dependencies": {
+    "9router-vibefin": "0.5.51"
   }
 }

@@ -1,21 +1,21 @@
 import fs from 'node:fs';
-import http from 'node:http';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
-import { execFileSync, execSync } from 'node:child_process';
+import { execSync } from 'node:child_process';
 import { spawn } from 'node:child_process';
-import { config, defaultPath, shellBin } from './config.js';
+import { config, defaultPath } from './config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_HOME = process.env.HOME || process.env.USERPROFILE || (process.getuid?.() === 0 ? '/root' : '/tmp');
-const ROUTER_HOME = process.env.WORKER_AGENTS_9ROUTER_DIR || path.join(DEFAULT_HOME, '9router');
-const ROUTER_NPM_PACKAGE = process.env.WORKER_AGENTS_9ROUTER_NPM_PACKAGE || '9router-vibefin';
+const ROUTER_NPM_PACKAGE = '9router-vibefin';
+const ROUTER_PACKAGE_DIR = path.join(config.projectRoot, 'node_modules', ROUTER_NPM_PACKAGE);
+const ROUTER_PACKAGE_JSON = path.join(ROUTER_PACKAGE_DIR, 'package.json');
+const ROUTER_SERVER_PATH = path.join(ROUTER_PACKAGE_DIR, 'app', 'server.js');
 const ROUTER_LOG_PATH = '/tmp/9router.log';
 const ROUTER_PORT = Number.parseInt(process.env.WORKER_AGENTS_9ROUTER_PORT || '20128', 10);
 const ROUTER_API_KEY = process.env.WORKER_AGENTS_9ROUTER_API_KEY || 'local-dev-key';
 const ROUTER_MODEL = process.env.WORKER_AGENTS_9ROUTER_MODEL || 'opencode/big-pickle';
 const OPEN_ACCESS_PATCH_MARK = 'sshworker: open remote LLM API access when requireApiKey=false';
-const OPEN_ACCESS_PATCH_SCRIPT = path.join(__dirname, '..', 'scripts', 'patch-9router-dashboard-guard.mjs');
 const NODE_FILE_POLYFILL = path.join(__dirname, '..', 'scripts', 'node-file-polyfill.cjs');
 const HEALTH_TIMEOUT_MS = Number.parseInt(process.env.ROUTER_HEALTH_TIMEOUT_MS || '120000', 10);
 const HEALTH_POLL_MS = 2000;
@@ -25,23 +25,19 @@ let startupPromise = null;
 let startupState = 'idle';
 let startupError = '';
 let openAccessLoopRunning = false;
+let readinessCheckedAt = '';
+let readinessModelsCount = 0;
+let launchGeneration = 0;
 
-
-function nextBuildArtifacts() {
-  return [
-    path.join(ROUTER_HOME, '.next', 'BUILD_ID'),
-    path.join(ROUTER_HOME, '.next', 'routes-manifest.json'),
-    path.join(ROUTER_HOME, '.next', 'prerender-manifest.json'),
-  ];
-}
-
-function hasCompleteRouterBuild() {
-  return nextBuildArtifacts().every((file) => fs.existsSync(file));
-}
-
-function clearRouterBuildOutput() {
-  fs.rmSync(path.join(ROUTER_HOME, '.next'), { recursive: true, force: true });
-}
+const originalProcessEmit = process.emit;
+process.emit = function suppressOwnedSqliteWarning(name, data, ...rest) {
+  if (name === 'warning'
+      && data?.name === 'ExperimentalWarning'
+      && /SQLite/i.test(data.message || '')) {
+    return false;
+  }
+  return originalProcessEmit.call(this, name, data, ...rest);
+};
 
 function execText(command) {
   try {
@@ -69,76 +65,30 @@ function execPowerShell(command) {
   }
 }
 
-function execPowerShellStrict(command) {
-  return execSync(`powershell.exe -NoProfile -Command ${JSON.stringify(command)}`, {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-    timeout: 600000,
-    env: { ...process.env, PATH: defaultPath }
-  });
-}
-
 function findRouterPackagePath() {
-  const candidates = [
-    ...npmGlobalPackageCandidates(),
-    path.join(DEFAULT_HOME, '.local', 'lib', 'node_modules', ROUTER_NPM_PACKAGE),
-    path.join('/usr/local/lib/node_modules', ROUTER_NPM_PACKAGE),
-    path.join('/usr/lib/node_modules', ROUTER_NPM_PACKAGE),
-    ROUTER_HOME,
-    process.env.HOME ? path.join(process.env.HOME, '9router') : '',
-    process.env.USERPROFILE ? path.join(process.env.USERPROFILE, '9router') : '',
-    '/root/9router',
-    path.join('/tmp', '9router'),
-  ].filter(Boolean);
-  const packagePath = candidates
-    .map((candidate) => (candidate.endsWith('package.json') ? candidate : path.join(candidate, 'package.json')))
-    .find((candidate) => fs.existsSync(candidate));
-  if (!packagePath) {
-    throw new Error(`${ROUTER_NPM_PACKAGE} package.json not found; checked npm global, hosted toolcache, nvm, Cellar, HOME, /root, /tmp`);
+  if (!fs.existsSync(ROUTER_PACKAGE_JSON)) {
+    throw new Error(`${ROUTER_NPM_PACKAGE} is missing from Worker Agents node_modules; run npm ci in ${config.projectRoot}`);
   }
-  return packagePath;
+  return ROUTER_PACKAGE_JSON;
 }
 
 function installedRouterServerPath() {
-  const packageJsonPath = findRouterPackagePath();
-  const serverPath = path.join(path.dirname(packageJsonPath), 'app', 'server.js');
-  if (!fs.existsSync(serverPath)) {
-    throw new Error(`${ROUTER_NPM_PACKAGE} server.js not found at ${serverPath}`);
+  findRouterPackagePath();
+  if (!fs.existsSync(ROUTER_SERVER_PATH)) {
+    throw new Error(`${ROUTER_NPM_PACKAGE} server.js not found at ${ROUTER_SERVER_PATH}`);
   }
-  return serverPath;
+  return ROUTER_SERVER_PATH;
 }
 
-function npmGlobalPackageCandidates() {
-  const roots = new Set();
-  const npmRoot = execText('npm root -g 2>/dev/null').trim();
-  if (npmRoot) roots.add(npmRoot);
-  if (process.env.NPM_CONFIG_PREFIX) {
-    roots.add(path.join(process.env.NPM_CONFIG_PREFIX, 'lib', 'node_modules'));
-  }
-  roots.add('/opt/node22/lib/node_modules');
-  roots.add('/opt/node20/lib/node_modules');
-  const execDir = path.dirname(process.execPath);
-  for (const rel of [
-    path.join('..', 'lib', 'node_modules'),
-    path.join('..', '..', 'lib', 'node_modules'),
-  ]) {
-    roots.add(path.resolve(execDir, rel));
-  }
-  for (const root of ['/opt/hostedtoolcache/node', '/usr/local/share/nvm/versions/node', '/usr/local/Cellar/node']) {
-    let entries = [];
-    try {
-      entries = fs.readdirSync(root, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      for (const lib of ['x64/lib/node_modules', 'lib/node_modules']) {
-        roots.add(path.join(root, entry.name, lib));
-      }
-    }
-  }
-  return [...roots].map((root) => path.join(root, ROUTER_NPM_PACKAGE, 'package.json'));
+function routerPackageMetadata() {
+  const packagePath = findRouterPackagePath();
+  const metadata = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+  return {
+    name: metadata.name || ROUTER_NPM_PACKAGE,
+    version: metadata.version || '',
+    packagePath,
+    serverPath: installedRouterServerPath(),
+  };
 }
 
 function findListenerForPort(port) {
@@ -183,28 +133,10 @@ function killExistingListeners() {
   return pid && pid > 0 ? pid : null;
 }
 
-async function ensureNpmInstalled(log) {
-  try {
-    findRouterPackagePath();
-    return false;
-  } catch {
-    // Install below.
-  }
-  if (log) log(`[9router] Installing ${ROUTER_NPM_PACKAGE} from npm...`);
-  if (process.platform === 'win32') {
-    execPowerShellStrict(`$ErrorActionPreference = "Stop"; npm i -g ${ROUTER_NPM_PACKAGE}@latest --prefer-online`);
-  } else {
-    execSync(`npm i -g ${ROUTER_NPM_PACKAGE}@latest --prefer-online`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 300000, env: { ...process.env, PATH: defaultPath } });
-  }
-  findRouterPackagePath();
-  if (log) log('[9router] npm install complete');
-  return true;
-}
-
 function patchRouterDashboardGuard(log) {
   const guardCandidates = [
-    path.join(ROUTER_HOME, 'src', 'dashboardGuard.js'),
-    path.join(ROUTER_HOME, 'app', 'dashboardGuard.js'),
+    path.join(ROUTER_PACKAGE_DIR, 'src', 'dashboardGuard.js'),
+    path.join(ROUTER_PACKAGE_DIR, 'app', 'dashboardGuard.js'),
   ];
   const guardPath = guardCandidates.find((candidate) => fs.existsSync(candidate));
   if (!guardPath) {
@@ -239,21 +171,11 @@ function patchRouterDashboardGuard(log) {
 }
 
 function routerMiddlewareCandidates() {
-  const roots = new Set([ROUTER_HOME]);
-  for (const pkgJson of npmGlobalPackageCandidates()) {
-    roots.add(path.dirname(pkgJson));
-  }
   const relativePaths = [
     path.join('app', '.next-cli-build', 'server', 'middleware.js'),
     path.join('.next', 'server', 'middleware.js'),
   ];
-  const candidates = [];
-  for (const root of roots) {
-    for (const relative of relativePaths) {
-      candidates.push(path.join(root, relative));
-    }
-  }
-  return candidates;
+  return relativePaths.map((relative) => path.join(ROUTER_PACKAGE_DIR, relative));
 }
 
 function patchRouterMiddleware(log) {
@@ -282,180 +204,54 @@ function patchRouterMiddleware(log) {
   return true;
 }
 
-function resolveRouterLaunch() {
-  const standaloneDir = path.join(ROUTER_HOME, '.next', 'standalone');
-  const standaloneServer = path.join(standaloneDir, 'server.js');
-  if (fs.existsSync(standaloneServer)) {
-    return { mode: 'standalone', cwd: standaloneDir, args: ['server.js'] };
-  }
-  if (hasCompleteRouterBuild()) {
-    return {
-      mode: 'next-start',
-      cwd: ROUTER_HOME,
-      args: [
-        path.join(ROUTER_HOME, 'node_modules', 'next', 'dist', 'bin', 'next'),
-        'start',
-        '--port',
-        String(ROUTER_PORT),
-        '--hostname',
-        '127.0.0.1'
-      ]
-    };
-  }
-  throw new Error('9Router build output missing: no standalone server.js and no complete .next build');
+function isRouterMiddlewarePatched() {
+  const middlewarePath = routerMiddlewareCandidates().find((candidate) => fs.existsSync(candidate));
+  if (!middlewarePath) return false;
+  return fs.readFileSync(middlewarePath, 'utf8').includes('openApiKeyAccess.requireApiKey!==false');
 }
 
-function launchWindowsStandalone(logFd) {
-  const launch = resolveRouterLaunch();
-  const standaloneDir = path.join(ROUTER_HOME, '.next', 'standalone');
-  const staticSrc = path.join(ROUTER_HOME, '.next', 'static');
-  const staticDst = path.join(standaloneDir, '.next', 'static');
-  const publicSrc = path.join(ROUTER_HOME, 'public');
-  const publicDst = path.join(standaloneDir, 'public');
-  const dataDir = path.join(process.env.HOME || process.env.USERPROFILE || 'C:\\Users\\Public', '.9router', 'data');
-  if (launch.mode === 'standalone') {
-    fs.mkdirSync(path.dirname(staticDst), { recursive: true });
-    fs.rmSync(staticDst, { recursive: true, force: true });
-    fs.rmSync(publicDst, { recursive: true, force: true });
-    if (fs.existsSync(staticSrc)) fs.cpSync(staticSrc, staticDst, { recursive: true });
-    if (fs.existsSync(publicSrc)) fs.cpSync(publicSrc, publicDst, { recursive: true });
+function assertSupportedNode() {
+  const major = Number.parseInt(process.versions.node.split('.')[0], 10);
+  if (!Number.isFinite(major) || major < 22) {
+    throw new Error(`Worker Agents requires Node.js 22 or newer for its owned 9Router runtime; running ${process.version} at ${process.execPath}`);
   }
-  fs.mkdirSync(dataDir, { recursive: true });
-  return spawn('C:\\Program Files\\nodejs\\node.exe', launch.args, {
-    cwd: launch.cwd,
-    detached: true,
-    stdio: ['ignore', logFd, logFd],
+}
+
+export function routerLaunchSpec(port = ROUTER_PORT, serverPath = installedRouterServerPath()) {
+  assertSupportedNode();
+  const dataDir = path.join(process.env.HOME || process.env.USERPROFILE || '/tmp', '.9router', 'data');
+  const existingNodeOptions = String(process.env.NODE_OPTIONS || '').trim();
+  const nodeOptions = [existingNodeOptions, `--require=${NODE_FILE_POLYFILL}`].filter(Boolean).join(' ');
+  return {
+    executable: process.execPath,
+    args: [serverPath],
+    cwd: path.dirname(serverPath),
     env: {
       ...process.env,
       PATH: defaultPath,
       NODE_ENV: 'production',
-      PORT: String(ROUTER_PORT),
+      PORT: String(port),
       HOSTNAME: '127.0.0.1',
-      NEXT_PUBLIC_BASE_URL: `http://127.0.0.1:${ROUTER_PORT}`,
-      BASE_URL: `http://127.0.0.1:${ROUTER_PORT}`,
-      DATA_DIR: dataDir
-    }
-  });
+      NEXT_PUBLIC_BASE_URL: `http://127.0.0.1:${port}`,
+      BASE_URL: `http://127.0.0.1:${port}`,
+      DATA_DIR: dataDir,
+      NODE_OPTIONS: nodeOptions,
+    },
+  };
 }
 
-function prepareStandalone() {
-  const standaloneDir = path.join(ROUTER_HOME, '.next', 'standalone');
-  const staticSrc = path.join(ROUTER_HOME, '.next', 'static');
-  const staticDst = path.join(standaloneDir, '.next', 'static');
-  const publicSrc = path.join(ROUTER_HOME, 'public');
-  const publicDst = path.join(standaloneDir, 'public');
-  execText(`rm -rf "${staticDst}" "${publicDst}"`);
-  if (fs.existsSync(staticSrc)) execText(`cp -R "${staticSrc}" "${staticDst}"`);
-  if (fs.existsSync(publicSrc)) execText(`cp -R "${publicSrc}" "${publicDst}"`);
-}
-
-function shellQuote(value) {
-  return `'${String(value).replaceAll("'", `'\"'\"'`)}'`;
-}
-
-function buildLaunchCommand(port = ROUTER_PORT) {
-  const dataDir = path.join(process.env.HOME || '/tmp', '.9router', 'data');
-  const installedPackage = [
-    path.join(DEFAULT_HOME, '.local', 'lib', 'node_modules', ROUTER_NPM_PACKAGE, 'app', 'server.js'),
-    path.join('/usr/local/lib/node_modules', ROUTER_NPM_PACKAGE, 'app', 'server.js'),
-    path.join('/usr/lib/node_modules', ROUTER_NPM_PACKAGE, 'app', 'server.js'),
-  ].find((p) => fs.existsSync(p));
-  const serverJsPath = installedPackage || path.join(ROUTER_HOME, '.next', 'standalone', 'server.js');
-  const workingDir = path.dirname(serverJsPath);
-  const launchPath = process.platform === 'win32'
-    ? defaultPath
-    : `/opt/node22/bin:/opt/node20/bin:${defaultPath}`;
-  return [
-    `export PATH=${shellQuote(launchPath)}`,
-    'export NODE_ENV=production',
-    `export PORT=${port}`,
-    'export HOSTNAME=127.0.0.1',
-    `export NEXT_PUBLIC_BASE_URL=http://127.0.0.1:${port}`,
-    `export BASE_URL=http://127.0.0.1:${port}`,
-    `export DATA_DIR=${shellQuote(dataDir)}`,
-    `export NODE_OPTIONS=${shellQuote(`--require=${NODE_FILE_POLYFILL}`)}`,
-    'mkdir -p "$DATA_DIR"',
-    `cd ${shellQuote(workingDir)}`,
-    `exec node ${shellQuote(serverJsPath)}`,
-  ].join('; ');
-}
-
-export function buildBootstrapCommand(port = ROUTER_PORT, routerServerPath = installedRouterServerPath()) {
-  if (process.platform === 'win32') {
-    return buildBootstrapPowerShellCommand(port);
+function launchOwnedRouter(logFd) {
+  const launch = routerLaunchSpec();
+  fs.mkdirSync(launch.env.DATA_DIR, { recursive: true });
+  if (!isRouterMiddlewarePatched()) {
+    throw new Error(`Owned 9Router middleware is not prepared; run npm ci in ${config.projectRoot}`);
   }
-  const standaloneDir = path.join(ROUTER_HOME, '.next', 'standalone');
-  const staticSrc = path.join(ROUTER_HOME, '.next', 'static');
-  const staticDst = path.join(standaloneDir, '.next', 'static');
-  const publicSrc = path.join(ROUTER_HOME, 'public');
-  const publicDst = path.join(standaloneDir, 'public');
-  const dataDir = path.join(process.env.HOME || '/tmp', '.9router', 'data');
-  const launchPath = `/opt/node22/bin:/opt/node20/bin:${defaultPath}`;
-  return [
-    'set -e',
-    `export PATH=${shellQuote(launchPath)}`,
-    `ROUTER_PORT=${shellQuote(port)}`,
-    `PATCH_SCRIPT=${shellQuote(OPEN_ACCESS_PATCH_SCRIPT)}`,
-    `DATA_DIR=${shellQuote(dataDir)}`,
-    `STANDALONE_DIR=${shellQuote(standaloneDir)}`,
-    `STATIC_SRC=${shellQuote(staticSrc)}`,
-    `STATIC_DST=${shellQuote(staticDst)}`,
-    `PUBLIC_SRC=${shellQuote(publicSrc)}`,
-    `PUBLIC_DST=${shellQuote(publicDst)}`,
-    `ROUTER_SERVER=${shellQuote(routerServerPath)}`,
-    'NPM_ROUTER_HOME="$(dirname "$(dirname "$ROUTER_SERVER")")"',
-    'if [ -d "$NPM_ROUTER_HOME" ]; then node "$PATCH_SCRIPT" "$NPM_ROUTER_HOME" || echo "[9router] npm 9router open-access patch skipped"; fi',
-    'export NODE_ENV=production',
-    `export PORT=${port}`,
-    'export HOSTNAME=127.0.0.1',
-    `export NEXT_PUBLIC_BASE_URL=http://127.0.0.1:${port}`,
-    `export BASE_URL=http://127.0.0.1:${port}`,
-    'export DATA_DIR=$DATA_DIR',
-    `export NODE_OPTIONS=${shellQuote(`--require=${NODE_FILE_POLYFILL}`)}`,
-    'mkdir -p "$DATA_DIR"',
-    'cd "$(dirname "$ROUTER_SERVER")"',
-    'exec node "$ROUTER_SERVER"',
-  ].join('\n');
-}
-
-function psQuote(value) {
-  return `'${String(value).replaceAll("'", "''")}'`;
-}
-
-function buildBootstrapPowerShellCommand(port = ROUTER_PORT) {
-  const standaloneDir = path.join(ROUTER_HOME, '.next', 'standalone');
-  const staticSrc = path.join(ROUTER_HOME, '.next', 'static');
-  const staticDst = path.join(standaloneDir, '.next', 'static');
-  const publicSrc = path.join(ROUTER_HOME, 'public');
-  const publicDst = path.join(standaloneDir, 'public');
-  const dataDir = path.join(process.env.HOME || process.env.USERPROFILE || 'C:\\Users\\Public', '.9router', 'data');
-  const runtimeLogPath = path.join(process.env.TEMP || 'C:\\tmp', '9router.log');
-  return [
-    '$ErrorActionPreference = "Stop"',
-    `$env:PATH = ${psQuote(defaultPath)}`,
-    `$standaloneDir = ${psQuote(standaloneDir)}`,
-    `$staticSrc = ${psQuote(staticSrc)}`,
-    `$staticDst = ${psQuote(staticDst)}`,
-    `$publicSrc = ${psQuote(publicSrc)}`,
-    `$publicDst = ${psQuote(publicDst)}`,
-    `$dataDir = ${psQuote(dataDir)}`,
-    `if (-not (Get-Command 9router -ErrorAction SilentlyContinue)) { npm i -g ${ROUTER_NPM_PACKAGE}@latest --prefer-online }`,
-    'New-Item -ItemType Directory -Force -Path (Split-Path $staticDst) | Out-Null',
-    'if (Test-Path $staticDst) { Remove-Item -Recurse -Force $staticDst }',
-    'if (Test-Path $publicDst) { Remove-Item -Recurse -Force $publicDst }',
-    'if (Test-Path $staticSrc) { Copy-Item -Recurse -Force $staticSrc $staticDst }',
-    'if (Test-Path $publicSrc) { Copy-Item -Recurse -Force $publicSrc $publicDst }',
-    '$env:NODE_ENV = "production"',
-    `$env:PORT = ${psQuote(String(port))}`,
-    '$env:HOSTNAME = "127.0.0.1"',
-    `$env:NEXT_PUBLIC_BASE_URL = ${psQuote(`http://127.0.0.1:${port}`)}`,
-    `$env:BASE_URL = ${psQuote(`http://127.0.0.1:${port}`)}`,
-    '$env:DATA_DIR = $dataDir',
-    'New-Item -ItemType Directory -Force -Path $env:DATA_DIR | Out-Null',
-    `$runtimeLogPath = ${psQuote(runtimeLogPath)}`,
-    '$nodeExe = (Get-Command node).Source',
-    'Start-Process -FilePath $nodeExe -WorkingDirectory $standaloneDir -ArgumentList \'server.js\' -RedirectStandardOutput $runtimeLogPath -RedirectStandardError $runtimeLogPath',
-  ].join('\n');
+  return spawn(launch.executable, launch.args, {
+    cwd: launch.cwd,
+    detached: true,
+    stdio: ['ignore', logFd, logFd],
+    env: launch.env,
+  });
 }
 
 function writeHermesConfig(port = ROUTER_PORT) {
@@ -480,28 +276,31 @@ function writeHermesConfig(port = ROUTER_PORT) {
   return true;
 }
 
-async function waitForHealth(timeoutMs = HEALTH_TIMEOUT_MS) {
+async function probeRouterModels() {
+  const response = await fetch(`http://127.0.0.1:${ROUTER_PORT}/v1/models`, {
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!response.ok) throw new Error(`/v1/models returned HTTP ${response.status}`);
+  const payload = await response.json();
+  const count = Array.isArray(payload?.data) ? payload.data.length : 0;
+  if (!count) throw new Error('/v1/models returned no models');
+  return count;
+}
+
+async function waitForReadiness(timeoutMs = HEALTH_TIMEOUT_MS) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     try {
-      const ok = await new Promise((resolve) => {
-        const req = http.get(`http://127.0.0.1:${ROUTER_PORT}/api/health`, (res) => {
-          res.resume();
-          resolve((res.statusCode || 500) < 400);
-        });
-        req.setTimeout(5000, () => {
-          req.destroy();
-          resolve(false);
-        });
-        req.on('error', () => resolve(false));
-      });
-      if (ok) return true;
+      const modelsCount = await probeRouterModels();
+      readinessCheckedAt = new Date().toISOString();
+      readinessModelsCount = modelsCount;
+      return modelsCount;
     } catch {
       // not ready yet
     }
     await new Promise((resolve) => setTimeout(resolve, HEALTH_POLL_MS));
   }
-  return false;
+  return 0;
 }
 
 async function applyOpenAccessSettings(log) {
@@ -547,54 +346,31 @@ async function applyOpenAccessSettings(log) {
 }
 
 function ensureOpenAccess(dbPath) {
-  const routerPackagePath = findRouterPackagePath();
-  // Existing Linux workers may have native better-sqlite3 built for the
-  // distro Node that launched 9Router, while Worker Agents itself can run
-  // under a newer bundled Node. Keep the DB helper on the compatible runtime.
-  const databaseNode = process.env.ROUTER_DATABASE_NODE
-    || (process.platform === 'linux' && fs.existsSync('/usr/bin/node') ? '/usr/bin/node' : process.execPath);
-  const settingsScript = `
-const { createRequire } = require('node:module');
-const requireFromRouter = createRequire(process.argv[1]);
-const Database = requireFromRouter('better-sqlite3');
-const db = new Database(process.argv[2]);
-db.pragma('busy_timeout = 10000');
-let changed = false;
-const row = db.prepare('select data from settings where id = 1').get();
-const data = row?.data ? JSON.parse(row.data) : {};
-if (data.requireLogin !== false) {
-  data.requireLogin = false;
-  changed = true;
-}
-if (data.requireApiKey !== false) {
-  data.requireApiKey = false;
-  changed = true;
-}
-if (changed) {
-  db.prepare('insert into settings(id, data) values(1, ?) on conflict(id) do update set data = excluded.data').run(JSON.stringify(data));
-}
-const verified = db.prepare('select data from settings where id = 1').get();
-const verifiedData = JSON.parse(verified?.data || '{}');
-if (verifiedData.requireLogin !== false) {
-  throw new Error('9Router requireLogin setting did not persist');
-}
-if (verifiedData.requireApiKey !== false) {
-  throw new Error('9Router requireApiKey setting did not persist');
-}
-db.close();
-process.stdout.write(changed ? 'changed' : 'unchanged');
-`;
-  const result = execFileSync(databaseNode, [
-    '-e',
-    settingsScript,
-    routerPackagePath,
-    dbPath,
-  ], {
-    encoding: 'utf8',
-    timeout: 10000,
-    env: { ...process.env, PATH: defaultPath },
-  }).trim();
-  return result === 'changed';
+  const db = new DatabaseSync(dbPath);
+  try {
+    db.exec('PRAGMA busy_timeout = 10000');
+    let changed = false;
+    const row = db.prepare('select data from settings where id = 1').get();
+    const data = row?.data ? JSON.parse(row.data) : {};
+    if (data.requireLogin !== false) {
+      data.requireLogin = false;
+      changed = true;
+    }
+    if (data.requireApiKey !== false) {
+      data.requireApiKey = false;
+      changed = true;
+    }
+    if (changed) {
+      db.prepare('insert into settings(id, data) values(1, ?) on conflict(id) do update set data = excluded.data').run(JSON.stringify(data));
+    }
+    const verified = db.prepare('select data from settings where id = 1').get();
+    const verifiedData = JSON.parse(verified?.data || '{}');
+    if (verifiedData.requireLogin !== false) throw new Error('9Router requireLogin setting did not persist');
+    if (verifiedData.requireApiKey !== false) throw new Error('9Router requireApiKey setting did not persist');
+    return changed;
+  } finally {
+    db.close();
+  }
 }
 
 async function probeRouterDatabase(log) {
@@ -638,11 +414,19 @@ function ensureOpenAccessSettings(log) {
 export async function start(log) {
   const live = findListenerForPort(ROUTER_PORT);
   if (live && live > 0) {
-    startupState = 'running';
-    startupError = '';
-    patchRouterMiddleware(log);
-    ensureOpenAccessSettings(log);
-    return getStatus();
+    try {
+      readinessModelsCount = await probeRouterModels();
+      readinessCheckedAt = new Date().toISOString();
+      startupState = 'running';
+      startupError = '';
+      ensureOpenAccessSettings(log);
+      return getStatus();
+    } catch (error) {
+      if (log) log(`[9router] Existing listener failed readiness and will be replaced: ${error.message}`);
+      killExistingListeners();
+      readinessModelsCount = 0;
+      readinessCheckedAt = '';
+    }
   }
   if (startupPromise) return await startupPromise;
   startupError = '';
@@ -651,36 +435,36 @@ export async function start(log) {
     setTimeout(async () => {
       try {
         killExistingListeners();
+        const runtime = routerPackageMetadata();
         const logFd = fs.openSync(ROUTER_LOG_PATH, 'w');
-        let child;
-        if (process.platform === 'win32') {
-          if (log) log(`[9router] Preparing Windows bootstrap on port ${ROUTER_PORT}...`);
-          await ensureNpmInstalled(log);
-          child = launchWindowsStandalone(logFd);
-        } else {
-          if (log) log(`[9router] Starting background bootstrap on port ${ROUTER_PORT}...`);
-          await ensureNpmInstalled(log);
-          const cmd = buildBootstrapCommand();
-          child = spawn(shellBin, ['-lc', cmd], {
-            detached: true,
-            stdio: ['ignore', logFd, logFd],
-            env: { ...process.env, PATH: defaultPath },
-          });
-        }
+        const generation = ++launchGeneration;
+        if (log) log(`[9router] Starting owned ${runtime.name}@${runtime.version} with ${process.execPath} on port ${ROUTER_PORT}...`);
+        const child = launchOwnedRouter(logFd);
+        child.once('exit', (code, signal) => {
+          if (generation !== launchGeneration) return;
+          readinessModelsCount = 0;
+          readinessCheckedAt = '';
+          if (startupState !== 'stopped') {
+            startupState = 'error';
+            startupError = `9Router exited before or after readiness (code=${code ?? 'null'}, signal=${signal || 'none'}).`;
+            if (log) log(`[9router] ${startupError}`);
+          }
+        });
         child.unref();
         fs.closeSync(logFd);
         startupState = 'starting';
         if (log) log(`[9router] Bootstrap process started (pid ${child.pid})`);
-        const healthy = await waitForHealth();
-        if (healthy) {
+        const modelsCount = await waitForReadiness();
+        if (modelsCount) {
           startupState = 'running';
-          if (log) log(`[9router] Health check passed on port ${ROUTER_PORT}`);
+          startupError = '';
+          if (log) log(`[9router] Readiness passed with ${modelsCount} models on port ${ROUTER_PORT}`);
           ensureOpenAccessSettings(log);
           writeHermesConfig();
         } else {
           startupState = 'error';
-          startupError = `9Router health check failed after ${HEALTH_TIMEOUT_MS / 1000}s.`;
-          if (log) log(`[9router] Health check failed after ${HEALTH_TIMEOUT_MS / 1000}s`);
+          startupError = `9Router /v1/models readiness failed after ${HEALTH_TIMEOUT_MS / 1000}s.`;
+          if (log) log(`[9router] Readiness failed after ${HEALTH_TIMEOUT_MS / 1000}s`);
         }
         resolve(getStatus());
       } catch (error) {
@@ -698,10 +482,11 @@ export async function start(log) {
 
 export function getStatus() {
   const listenerPid = findListenerForPort(ROUTER_PORT);
-  const running = Boolean(listenerPid);
-  if (running) {
-    startupState = 'running';
-    startupError = '';
+  const listening = Boolean(listenerPid);
+  const running = listening && readinessModelsCount > 0;
+  if (!listening) {
+    readinessModelsCount = 0;
+    readinessCheckedAt = '';
   }
   const pid = listenerPid && listenerPid > 0 ? listenerPid : null;
   let logs = [];
@@ -718,6 +503,8 @@ export function getStatus() {
   } catch { /* no log yet */ }
   const state = running
     ? 'running'
+    : listening
+      ? 'starting'
     : startupState === 'installing'
       ? 'installing'
       : startupState === 'starting'
@@ -725,7 +512,7 @@ export function getStatus() {
         : startupState === 'stopped'
           ? 'stopped'
           : 'error';
-  const error = running
+  const error = running || listening
     ? ''
     : (startupError || (state === 'installing'
       ? '9Router is preparing its local checkout and build.'
@@ -734,6 +521,23 @@ export function getStatus() {
         : state === 'stopped'
           ? ''
           : `9Router is not listening on port ${ROUTER_PORT}.`));
+  let runtime = null;
+  try {
+    runtime = {
+      ...routerPackageMetadata(),
+      owned: true,
+      nodeVersion: process.version,
+      nodeExecutable: process.execPath,
+    };
+  } catch (runtimeError) {
+    runtime = {
+      name: ROUTER_NPM_PACKAGE,
+      owned: true,
+      nodeVersion: process.version,
+      nodeExecutable: process.execPath,
+      error: runtimeError.message,
+    };
+  }
   return {
     configuredPort: ROUTER_PORT,
     livePort: running ? ROUTER_PORT : null,
@@ -741,6 +545,13 @@ export function getStatus() {
     error,
     pid,
     logs,
+    readiness: {
+      ready: running,
+      checkedAt: readinessCheckedAt,
+      modelsCount: readinessModelsCount,
+      probe: '/v1/models',
+    },
+    runtime,
     url: `http://127.0.0.1:${ROUTER_PORT}/dashboard/providers`,
     agent: {
       id: '__9router__',
@@ -758,17 +569,23 @@ export function getStatus() {
 }
 
 export async function restart(log) {
+  launchGeneration += 1;
   startupPromise = null;
   startupState = 'idle';
   startupError = '';
+  readinessModelsCount = 0;
+  readinessCheckedAt = '';
   killExistingListeners();
   return start(log);
 }
 
 export async function stop(log) {
+  launchGeneration += 1;
   startupPromise = null;
   startupState = 'stopped';
   startupError = '';
+  readinessModelsCount = 0;
+  readinessCheckedAt = '';
   const pid = killExistingListeners();
   if (log) {
     if (pid) log(`[9router] Stopped pid ${pid}`);
@@ -777,4 +594,4 @@ export async function stop(log) {
   return getStatus();
 }
 
-export { ROUTER_PORT, ROUTER_API_KEY, ROUTER_MODEL, patchRouterDashboardGuard, patchRouterMiddleware };
+export { ROUTER_PORT, ROUTER_API_KEY, ROUTER_MODEL, isRouterMiddlewarePatched, patchRouterDashboardGuard, patchRouterMiddleware, routerPackageMetadata };

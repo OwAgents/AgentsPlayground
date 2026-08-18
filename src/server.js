@@ -13,6 +13,7 @@ import { baselineStatus, installSkill, listInstalledSkills, readInstalledSkill, 
 import { rulesService } from './rules.js';
 
 const publicDir = path.join(config.projectRoot, 'public');
+const workerPackage = JSON.parse(fs.readFileSync(path.join(config.projectRoot, 'package.json'), 'utf8'));
 const contentTypes = new Map([
   ['.html', 'text/html; charset=utf-8'],
   ['.css', 'text/css; charset=utf-8'],
@@ -172,6 +173,30 @@ function publicRouter(router, origin) {
   } catch {
     return router;
   }
+}
+
+function releaseIdentity() {
+  let commit = String(process.env.WORKER_AGENTS_RELEASE_SHA || '').trim();
+  let source = commit ? 'environment' : 'unknown';
+  if (!commit) {
+    try {
+      commit = execSync('git rev-parse HEAD', {
+        cwd: config.projectRoot,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+      source = 'git';
+    } catch {
+      commit = '';
+    }
+  }
+  return {
+    workerAgentsVersion: workerPackage.version,
+    workerAgentsCommit: commit,
+    identitySource: source,
+    nodeVersion: process.version,
+    nodeExecutable: process.execPath,
+  };
 }
 
 function getOpenClawProxyTarget() {
@@ -361,6 +386,7 @@ function statusPayload(req) {
     : agents;
   return {
     version: buildVersion,
+    release: releaseIdentity(),
     lifecycle: lifecyclePayload(),
     auth: getAuthStatus(),
     router,
@@ -490,6 +516,19 @@ async function handleRequest(req, res) {
 
   if (url.pathname === '/api/status' && req.method === 'GET') {
     sendJson(res, 200, statusPayload(req));
+    return;
+  }
+
+  if (url.pathname === '/api/ready' && req.method === 'GET') {
+    const payload = statusPayload(req);
+    const ready = payload.router?.state === 'running'
+      && payload.router?.readiness?.ready === true
+      && payload.router?.runtime?.owned === true;
+    sendJson(res, ready ? 200 : 503, {
+      ready,
+      release: payload.release,
+      router: payload.router,
+    });
     return;
   }
 

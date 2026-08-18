@@ -37,8 +37,8 @@ function Ensure-Node {
     Refresh-Path
   }
   $major = [int]((node --version).TrimStart('v').Split('.')[0])
-  if ($major -lt 20) {
-    throw "Node.js >=20 is required; found $(node --version). Install a newer Node.js LTS and rerun."
+  if ($major -lt 22) {
+    throw "Node.js >=22 is required; found $(node --version). Install a newer Node.js LTS and rerun."
   }
   if (-not (Has-Command npm)) { Refresh-Path }
   if (-not (Has-Command npm)) { throw 'npm is missing after Node.js check.' }
@@ -92,7 +92,7 @@ if (Has-Command py) {
 }
 
 Write-Host '[setup] Installing npm dependencies...'
-npm install
+npm ci
 
 if ($CleanAll -or $Clean9Router) {
   Write-Host '[setup] Cleaning 9Router state...'

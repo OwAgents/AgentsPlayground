@@ -9,15 +9,15 @@ Default local ports:
 
 ## Worker Agents launch notes
 
-- Worker Agents uses the published `9router-vibefin` npm package. Bootstrap installs it when absent, resolves its exact `package.json`, and pins that package's `app/server.js` before changing the launch `PATH`; do not rediscover it later with `command -v 9router` or `npm root -g` because persistent workers can have `/usr`, `/usr/local`, `/opt/node20`, and `/opt/node22` npm prefixes at the same time.
-- If npm installation fails, startup fails clearly; there is no Git/source-build fallback.
-- For a manual package diagnostic, run the packaged server with the same modern Node runtime Worker Agents selects:
+- Worker Agents owns `9router-vibefin` as the exact `0.5.51` dependency in `package-lock.json`. Deployment runs `npm ci`, and runtime launches only `workerAgents/node_modules/9router-vibefin/app/server.js` with the same Node executable as Worker Agents. Global npm prefixes, `command -v`, `npm root -g`, and Git/source-build fallbacks are not consulted.
+- Node.js 22 or newer is required so Worker Agents and 9Router share one runtime contract and the built-in SQLite API.
+- For a manual package diagnostic from the Worker Agents checkout, run:
 
 ```bash
-/opt/node22/bin/node /opt/node22/lib/node_modules/9router-vibefin/app/server.js
+node node_modules/9router-vibefin/app/server.js
 ```
 
-- Treat `/api/health` as process readiness only. The integration gate is a successful `GET /v1/models`, followed by a non-streaming `POST /v1/chat/completions`; an incompatible or damaged package can briefly return health before crashing when the database is first used.
+- Treat 9Router `/api/health` as process liveness only. Worker Agents becomes ready only after local `GET /v1/models` returns a non-empty catalog; public deployment then requires Worker Agents `/api/ready`, public `GET /v1/models`, and a non-streaming `POST /v1/chat/completions` canary.
 - On macOS, 9Router listener detection needs an `lsof`/`netstat` fallback; Linux-only `ss` checks can incorrectly report “not running”.
 - OpenCode worker preset: starts near port `18924`
 - OpenCode is configured with an explicit `9router` OpenAI-compatible provider from the live `GET /v1/models` response; the built-in `openai` provider is disabled so the worker does not expose or fall back to OpenAI.
