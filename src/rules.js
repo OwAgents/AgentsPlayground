@@ -141,17 +141,15 @@ export function createRulesService(options = {}) {
     const hermesHome = path.resolve(env.HERMES_HOME || (process.platform === 'win32' ? path.join(env.LOCALAPPDATA || homeDir, 'hermes') : path.join(homeDir, '.hermes')));
     const openClawHome = path.resolve(env.OPENCLAW_HOME || path.join(homeDir, '.openclaw'));
     const deepSeekDir = path.resolve(env.DEEPSEEK_HARNESS_DIR || path.join(homeDir, 'deepseek-harness'));
-    const openWorkDir = path.resolve(env.OPENWORK_DIR || path.join(homeDir, 'openwork'));
     const agentZeroDir = path.resolve(env.AGENT_ZERO_DIR || path.join(homeDir, 'agent-zero'));
     const opencodeTarget = path.join(xdgConfigHome, 'opencode', 'AGENTS.md');
-    return { codexHome, hermesHome, openClawHome, deepSeekDir, openWorkDir, agentZeroDir, opencodeTarget };
+    return { codexHome, hermesHome, openClawHome, deepSeekDir, agentZeroDir, opencodeTarget };
   }
 
   function detectAdapters() {
     const paths = resolvedPaths();
     const codexInstalled = exists(paths.codexHome) || hasCommand('codex') || hasCommand('codexapp');
     const opencodeInstalled = exists(path.dirname(paths.opencodeTarget)) || hasCommand('opencode');
-    const openworkInstalled = exists(path.join(paths.openWorkDir, 'package.json')) || hasCommand('openwork');
     const hermesInstalled = exists(paths.hermesHome) || hasCommand('hermes') || hasCommand('hermes-webui');
     const openclawInstalled = exists(paths.openClawHome) || hasCommand('openclaw');
     const deepseekInstalled = exists(path.join(paths.deepSeekDir, 'package.json'));
@@ -159,7 +157,6 @@ export function createRulesService(options = {}) {
     return [
       baseReport('codex', codexInstalled, path.join(paths.codexHome, 'AGENTS.md')),
       baseReport('opencode', opencodeInstalled, paths.opencodeTarget),
-      baseReport('openwork', openworkInstalled, paths.opencodeTarget),
       baseReport('hermes', hermesInstalled, path.join(paths.hermesHome, 'SOUL.md')),
       baseReport('openclaw', openclawInstalled, path.join(paths.openClawHome, 'workspace', 'AGENTS.md')),
       baseReport('deepseek', deepseekInstalled, path.join(paths.deepSeekDir, 'AGENTS.md')),

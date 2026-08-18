@@ -50,7 +50,6 @@ Yes, it launches agents. Yes, it has a File Browser and Web VNC. **Yes, the stop
 | 🧙 Hermes WebUI | Boots the gateway and web interface |
 | 🧪 9Router | Installs, starts, checks, and reports the router |
 | 🕵️ Agent Zero | Prepares its environment and supervises the UI |
-| 🛠️ OpenWork | Starts the headless web workspace |
 | 📁 File Browser | Browses and edits files from the dashboard |
 | 🖥️ Web VNC | Provides a browser-accessible desktop |
 | 🧩 Your worker | Loads custom commands from `workers.json` |

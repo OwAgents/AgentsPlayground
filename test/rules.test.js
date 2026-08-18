@@ -65,7 +65,7 @@ test('local mode keeps generated rules empty and writes canonical user rules', (
   assert.equal(fs.readFileSync(path.join(homeDir, '.worker-agents', 'Rules.md'), 'utf8'), saved.content);
 });
 
-test('custom homes inject supported adapters, deduplicate OpenCode and OpenWork, and skip Agent Zero', () => {
+test('custom homes inject supported adapters and skip Agent Zero', () => {
   const { root, homeDir, projectRoot } = fixture();
   const env = {
     CODEX_HOME: path.join(root, 'codex-home'),
@@ -73,12 +73,11 @@ test('custom homes inject supported adapters, deduplicate OpenCode and OpenWork,
     HERMES_HOME: path.join(root, 'hermes-home'),
     OPENCLAW_HOME: path.join(root, 'claw-home'),
     DEEPSEEK_HARNESS_DIR: path.join(root, 'deepseek'),
-    OPENWORK_DIR: path.join(root, 'openwork'),
     AGENT_ZERO_DIR: path.join(root, 'agent-zero'),
     WORKER_AGENTS_URL: 'https://worker-test-worker-agents-1456.agentsweb.space/'
   };
   for (const directory of [env.CODEX_HOME, path.join(env.XDG_CONFIG_HOME, 'opencode'), env.HERMES_HOME, path.join(env.OPENCLAW_HOME, 'workspace')]) fs.mkdirSync(directory, { recursive: true });
-  for (const directory of [env.DEEPSEEK_HARNESS_DIR, env.OPENWORK_DIR]) {
+  for (const directory of [env.DEEPSEEK_HARNESS_DIR]) {
     fs.mkdirSync(directory, { recursive: true });
     fs.writeFileSync(path.join(directory, 'package.json'), '{}');
   }
@@ -94,7 +93,7 @@ test('custom homes inject supported adapters, deduplicate OpenCode and OpenWork,
   assert.match(payload.content, /## Custom checks\n\nUser rule/);
   assert.doesNotMatch(payload.effective, /Never inject this/);
   assert.equal(payload.includeDeploymentRules, true);
-  for (const id of ['codex', 'opencode', 'openwork', 'hermes', 'openclaw', 'deepseek']) {
+  for (const id of ['codex', 'opencode', 'hermes', 'openclaw', 'deepseek']) {
     const report = payload.adapters.find((item) => item.id === id);
     assert.equal(report.injected, true, id);
     assert.equal(report.error, null, id);

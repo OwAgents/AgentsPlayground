@@ -325,8 +325,8 @@ async function ensureDeepSeekHarnessInstalled(log) {
   // The dev image has Node 20 at /opt/node20 while the system npx wrapper is
   // tied to the older distro Node. Invoke npx through the running Node binary
   // so reinstall/build uses the same runtime as Worker Agents.
-  const npxPath = '/usr/bin/npx';
-  const pnpm = `PNPM_CLI="$(find ${shellQuote(path.join(os.homedir(), '.npm', '_npx'))} -path '*/pnpm/bin/pnpm.cjs' -print -quit)"; if [ -z "$PNPM_CLI" ]; then ${shellQuote(deepSeekNode)} ${shellQuote(npxPath)} --yes pnpm@9 --version >/dev/null; PNPM_CLI="$(find ${shellQuote(path.join(os.homedir(), '.npm', '_npx'))} -path '*/pnpm/bin/pnpm.cjs' -print -quit)"; fi; export PATH="$(dirname "$PNPM_CLI")/../../.bin:$PATH"; ${shellQuote(deepSeekNode)} "$PNPM_CLI"`;
+  const npxCommand = process.env.NPX_PATH || 'npx';
+  const pnpm = `PNPM_CLI="$(find ${shellQuote(path.join(os.homedir(), '.npm', '_npx'))} -path '*/pnpm/bin/pnpm.cjs' -print -quit)"; if [ -z "$PNPM_CLI" ]; then ${shellQuote(deepSeekNode)} "$(command -v ${shellQuote(npxCommand)})" --yes pnpm@9 --version >/dev/null; PNPM_CLI="$(find ${shellQuote(path.join(os.homedir(), '.npm', '_npx'))} -path '*/pnpm/bin/pnpm.cjs' -print -quit)"; fi; export PATH="$(dirname "$PNPM_CLI")/../../.bin:$PATH"; ${shellQuote(deepSeekNode)} "$PNPM_CLI"`;
   if (!fs.existsSync(path.join(dir, 'package.json'))) {
     await runCommand(`export PATH=${shellQuote(defaultPath)} && rm -rf ${shellQuote(dir)} && git clone --depth 1 https://github.com/deepseek-ai/deepseek-harness.git ${shellQuote(dir)}`, { onData: log });
   }
@@ -341,7 +341,7 @@ async function ensureDeepSeekHarnessInstalled(log) {
   }
   const buildMarker = path.join(dir, '.worker-agents-built');
   if (!fs.existsSync(buildMarker)) {
-    await runCommand(`export PATH=${shellQuote(path.dirname(deepSeekNode))}:${shellQuote(defaultPath)} && cd ${shellQuote(dir)} && ${pnpm} add -Dw unrun --ignore-scripts && ${pnpm} install --no-frozen-lockfile --ignore-scripts && ${shellQuote(deepSeekNode)} /usr/bin/npm run build`, { onData: log });
+    await runCommand(`export PATH=${shellQuote(path.dirname(deepSeekNode))}:${shellQuote(defaultPath)} && cd ${shellQuote(dir)} && ${pnpm} add -Dw unrun --ignore-scripts && ${pnpm} install --no-frozen-lockfile --ignore-scripts && ${shellQuote(deepSeekNode)} "$(command -v npm)" run build`, { onData: log });
     fs.writeFileSync(buildMarker, `${new Date().toISOString()}\n`);
   }
   await ensureDeepSeekHarnessSettings(log);
@@ -377,11 +377,6 @@ async function freshInstallHermes(log) {
     process.env.HERMES_WEBUI_DIR || path.join(os.homedir(), 'hermes-webui'),
     config.hermesHome
   ], log, 'hermes');
-}
-
-async function freshInstallOpenWork(log) {
-  await freshRemove([openWorkDir()], log, 'openwork');
-  await runCommand('npm uninstall -g opencode-ai', { onData: log }).catch(() => {});
 }
 
 async function freshInstallAgentZero(log) {
@@ -510,102 +505,12 @@ async function ensureHermesGatewayStarted(log) {
 
 
 
-function openWorkDir() {
-  return process.env.OPENWORK_DIR || path.join(os.homedir(), 'openwork');
-}
-
-const OPENWORK_VITE_PATCH_MARK = 'sshworker: force esnext for Vite dep optimizer (esbuild 0.28.1)';
-
-function patchOpenWorkViteConfig(log) {
-  const configPath = path.join(openWorkDir(), 'apps', 'app', 'vite.config.ts');
-  if (!fs.existsSync(configPath)) {
-    if (log) log('[openwork] vite.config.ts not found, skipping esbuild optimizer patch');
-    return false;
-  }
-  let source = fs.readFileSync(configPath, 'utf8');
-  if (source.includes(OPENWORK_VITE_PATCH_MARK)) {
-    if (log) log('[openwork] vite.config.ts already patched for esnext dep optimizer');
-    return false;
-  }
-  const needle = '  server: {';
-  if (!source.includes(needle)) {
-    if (log) log('[openwork] vite.config.ts shape changed, skipping esbuild optimizer patch');
-    return false;
-  }
-  const replacement = `  // ${OPENWORK_VITE_PATCH_MARK}
-  optimizeDeps: {
-    esbuildOptions: { target: "esnext" },
-  },
-
-  server: {`;
-  fs.writeFileSync(configPath, source.replace(needle, replacement));
-  if (log) log('[openwork] Patched vite.config.ts dep optimizer target to esnext');
-  return true;
-}
-
-async function ensureOpenWorkRepo(log) {
-  const dir = openWorkDir();
-  const repo = process.env.OPENWORK_GIT_URL || 'https://github.com/different-ai/openwork.git';
-  if (fs.existsSync(path.join(dir, 'package.json'))) return { changed: false, dir };
-  await runCommand(`rm -rf "${dir}" && git clone --depth 1 "${repo}" "${dir}"`, { onData: log });
-  return { changed: true, dir };
-}
-
-async function ensureOpenWorkInstalled(log) {
-  await ensureGlobalPackage('pnpm', 'pnpm', log);
-  await ensureGlobalPackage('bun', 'bun', log);
-  await ensureGlobalPackage('opencode', 'opencode-ai', log);
-  const { dir } = await ensureOpenWorkRepo(log);
-  await runCommand(`cd "${dir}" && pnpm install --frozen-lockfile`, { onData: log });
-  if (patchOpenWorkViteConfig(log)) {
-    for (const cachePath of [
-      path.join(dir, 'apps', 'app', 'node_modules', '.vite'),
-      path.join(dir, 'node_modules', '.vite')
-    ]) {
-      fs.rmSync(cachePath, { recursive: true, force: true });
-    }
-  }
-  return dir;
-}
-
-
-function openWorkPublicHost(port) {
-  const explicit = process.env.OPENWORK_PUBLIC_HOST || process.env.VITE_ALLOWED_HOSTS || '';
-  if (explicit) return explicit.split(',')[0].trim();
-  const publicUrl = process.env.AGENT_CONSOLE_PUBLIC_URL || process.env.WORKER_AGENTS_URL || readWorkerAgentsPublicUrl();
-  if (!publicUrl) return '';
-  try {
-    const hostname = new URL(publicUrl).hostname;
-    if (port && hostname.endsWith('.agentsweb.space')) {
-      return hostname.match(/-\d+\.agentsweb\.space$/)
-        ? hostname.replace(/-\d+(\.agentsweb\.space)$/, `-${port}$1`)
-        : `${hostname.replace(/\.agentsweb\.space$/, '')}-${port}.agentsweb.space`;
-    }
-    return hostname;
-  } catch {
-    return '';
-  }
-}
-
-function defaultOpenWorkCommand(port) {
-  const dir = openWorkDir();
-  const serverPort = port + 1;
-  return [
-    `cd ${shellQuote(dir)} && `,
-    `OPENWORK_REMOTE_ACCESS=1 OPENWORK_WEB_PORT=${port} OPENWORK_PORT=${serverPort} `,
-      `OPENWORK_PUBLIC_HOST=${shellQuote(openWorkPublicHost(port))} VITE_ALLOWED_HOSTS=${shellQuote(openWorkPublicHost(port))} `,
-    'OPENWORK_DEV_HEADLESS_WEB_AUTOBUILD=1 ',
-    'exec pnpm dev:headless-web'
-  ].join('');
-}
-
-
 function agentZeroDir() {
   return process.env.AGENT_ZERO_DIR || path.join(os.homedir(), 'agent-zero');
 }
 
 function agentZeroUsrDir() {
-  return process.env.AGENT_ZERO_USR_DIR || path.join(os.homedir(), 'agent-zero-usr');
+  return process.env.AGENT_ZERO_USR_DIR || path.join(agentZeroDir(), 'usr');
 }
 
 function agentZeroPython() {
@@ -617,7 +522,7 @@ function ensureAgentZeroConfig(apiBase = process.env.AGENT_ZERO_9ROUTER_BASE_URL
   const pluginDir = path.join(usrDir, 'plugins', '_model_config');
   fs.mkdirSync(pluginDir, { recursive: true });
   const apiKey = routerApiKey();
-  const model = routerDefaultModel();
+  const model = process.env.AGENT_ZERO_MODEL || 'oc/big-pickle';
   const presets = [
     '- name: Default',
     '  chat:',
@@ -1201,33 +1106,6 @@ const builtInDefinitions = [
       UV_LINK_MODE: 'copy',
       HERMES_WEBUI_AGENT_DIR: process.env.HERMES_WEBUI_AGENT_DIR || windowsHermesAgentDir(),
       HERMES_WEBUI_PYTHON: process.env.HERMES_WEBUI_PYTHON || windowsHermesPython()
-    })
-  },
-  {
-    id: 'openwork',
-    name: 'OpenWork',
-    basePort: 18945,
-    path: '/',
-    command: (port) => applyPortTemplate(
-      commandFromEnv('AGENT_CMD_OPENWORK', defaultOpenWorkCommand(port)),
-      port
-    ),
-    readyPatterns: [/dev:headless-web.*Web URL:/i, /VITE.*ready/i, /Local:/i],
-    beforeReinstall: freshInstallOpenWork,
-    beforeStart: async (_port, log) => {
-      await refreshTokenIfNeeded();
-      await discoverRouterModels(log);
-      await ensureOpenWorkInstalled(log);
-      injectRulesAfterInstall('openwork', log);
-    },
-    env: () => buildBaseEnv({
-      OPENAI_BASE_URL: routerBaseUrl(),
-      OPENAI_API_KEY: routerApiKey(),
-      WORKER_AGENTS_9ROUTER_MODEL: routerDefaultModel(),
-      OPENCODE_PROVIDER: 'openai',
-      OPENCODE_MODEL: routerDefaultModel(),
-      OPENWORK_PUBLIC_HOST: openWorkPublicHost(18945),
-      VITE_ALLOWED_HOSTS: openWorkPublicHost(18945)
     })
   },
   {
