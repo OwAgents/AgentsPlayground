@@ -605,7 +605,7 @@ function agentZeroDir() {
 }
 
 function agentZeroUsrDir() {
-  return process.env.AGENT_ZERO_USR_DIR || path.join(agentZeroDir(), 'usr');
+  return process.env.AGENT_ZERO_USR_DIR || path.join(os.homedir(), 'agent-zero-usr');
 }
 
 function agentZeroPython() {
@@ -617,7 +617,7 @@ function ensureAgentZeroConfig(apiBase = process.env.AGENT_ZERO_9ROUTER_BASE_URL
   const pluginDir = path.join(usrDir, 'plugins', '_model_config');
   fs.mkdirSync(pluginDir, { recursive: true });
   const apiKey = routerApiKey();
-  const model = process.env.AGENT_ZERO_MODEL || 'oc/big-pickle';
+  const model = routerDefaultModel();
   const presets = [
     '- name: Default',
     '  chat:',

@@ -8,6 +8,7 @@ const execFileAsync = promisify(execFile);
 const SEARCH_TIMEOUT_MS = 60_000;
 const INSTALL_TIMEOUT_MS = 120_000;
 const BASELINE_MANIFEST_PATH = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'skills', 'manifest.json');
+const UNIVERSAL_AGENT_ARGS = ['--global', '--agent', '*'];
 
 function skillRoots() {
   const roots = [
@@ -108,7 +109,7 @@ export async function searchSkills(query) {
 export async function installSkill(source, expectedName = '') {
   const cleanSource = String(source || '').trim();
   if (!/^[A-Za-z0-9._/-]+@[A-Za-z0-9._-]+$/.test(cleanSource)) throw new Error('Missing or invalid skill source.');
-  await execFileAsync('npx', ['--yes', 'skills', 'add', cleanSource, '--yes', '--global'], {
+  await execFileAsync('npx', ['--yes', 'skills', 'add', cleanSource, '--yes', ...UNIVERSAL_AGENT_ARGS], {
     timeout: INSTALL_TIMEOUT_MS,
     maxBuffer: 4 * 1024 * 1024
   });
@@ -124,7 +125,7 @@ export async function removeSkill(name) {
   if (!listInstalledSkills().some((skill) => skill.name === cleanName)) {
     throw new Error(`${cleanName} is not installed.`);
   }
-  await execFileAsync('npx', ['--yes', 'skills', 'remove', cleanName, '--yes', '--global'], {
+  await execFileAsync('npx', ['--yes', 'skills', 'remove', cleanName, '--yes', ...UNIVERSAL_AGENT_ARGS], {
     timeout: INSTALL_TIMEOUT_MS,
     maxBuffer: 4 * 1024 * 1024
   });
