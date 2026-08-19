@@ -1,187 +1,456 @@
-<div align="center">
+# Worker Agents
 
-# 🤖 Worker Agents
+## The machine that launches other machines
 
-### One dashboard. Many agents. Zero terminal-tab archaeology. 🚀
+Worker Agents is a Node.js control plane for running local AI agents, web tools, routers, file browsers, VNC sessions, and assorted other things that seemed like a good idea at 2 a.m.
 
-[![Node.js](https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white&style=for-the-badge)](https://nodejs.org/)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white&style=for-the-badge)](Dockerfile)
-[![Status](https://img.shields.io/badge/Status-IT%20LIVES-brightgreen?style=for-the-badge)](#-quick-start)
-[![Stars](https://img.shields.io/github/stars/OpenWebAgents/workerAgents?style=for-the-badge&logo=github&color=gold)](https://github.com/OpenWebAgents/workerAgents/stargazers)
+It gives you one dashboard, one set of controls, and several independently running agents that may or may not be installing dependencies while claiming to be “ready.”
 
-> **Your AI agents demanded a mission-control room.**
-> **We gave them buttons, logs, health states, and just enough supervision to look responsible.**
+The default dashboard lives at:
 
 ```text
-╔══════════════════════════════════════════════════╗
-║  AGENTS: CHAOTIC    DASHBOARD: CALM    VIBE: ✅  ║
-╚══════════════════════════════════════════════════╝
+http://127.0.0.1:1456
 ```
 
-</div>
+If `PORT` or `AGENT_CONSOLE_PORT` is set, it will use that instead.
 
----
+## The dashboard, observed in its natural habitat
 
-## 📸 Mission Control, Caught in the Act
+![Worker Agents dashboard showing agent controls and runtime states](docs/images/dashboard.jpg)
 
-<div align="center">
+Most “agent dashboard” garbage is either:
 
-<img src="docs/images/dashboard.jpg" alt="Worker Agents dashboard showing agent controls and live runtime states" width="555" />
+- some overengineered Electron abomination;
+- a half-dead Electron wrapper that eats 2GB of RAM to show you a terminal; or
+- pure vaporware that only works if you sacrifice a goat to Anthropic’s API.
 
-<sub>Real dashboard. Real runtime states. No actors were paid, although several agents requested API credits.</sub>
+This one is different.
 
-</div>
+Worker Agents on GitHub is a dead-simple Node control plane that just starts and supervises your local agent UIs.
 
----
+One web dashboard. You click start. It shows PID, port, logs, and status. You can restart things without copy-pasting 40-character commands like a caveman.
 
-## 🧠 TL;DR
+Built-in presets for:
 
-Worker Agents is a local Node.js control plane for launching and supervising agent UIs from one browser dashboard. It tracks ports, processes, URLs, logs, errors, and status so you can stop asking, “Wait… which terminal was OpenClaw in?”
+- OpenClaw
+- OpenCode
+- Codex Web Local
+- 9Router
+- Hermes WebUI
 
-Yes, it launches agents. Yes, it has a File Browser and Web VNC. **Yes, the stop button actually stops things.**
-
-## 🤯 What Can It Herd?
-
-| 🎭 Suspect | 🛠️ What Worker Agents does |
-|---|---|
-| 🧠 Codex Web Local | Launches and watches the local UI |
-| 🐙 OpenCode | Starts the web server and captures runtime output |
-| 🦞 OpenClaw | Runs the gateway behind a same-origin proxy |
-| 🧙 Hermes WebUI | Boots the gateway and web interface |
-| 🧪 9Router | Installs, starts, checks, and reports the router |
-| 🕵️ Agent Zero | Prepares its environment and supervises the UI |
-| 📁 File Browser | Browses and edits files from the dashboard |
-| 🖥️ Web VNC | Provides a browser-accessible desktop |
-| 🧩 Your worker | Loads custom commands from `workers.json` |
-
-## ⚡ Quick Start
+You can throw any random worker in via `workers.json` and it just works. Port allocation is automatic. Ready-patterns let it know when the thing is up instead of guessing.
 
 ```bash
-# 🔓 Install the exact lockfile-owned runtime and validate it
-npm ci
-npm run self-check
+npm install && npm start
+```
+
+Dashboard at `http://127.0.0.1:1456`.
+
+That’s it.
+
+No cloud. No telemetry. No “sign up for our beta.” Just a local process manager that doesn’t insult your intelligence.
+
+If you’re already running multiple agent frontends and you’re tired of `kill -9`, remembering ports, and staring at terminal tabs like a sleep-deprived sysadmin, this is one of the least painful solutions available.
+
+## What is this?
+
+Most “AI agent platforms” are a landing page, three buttons, and a promise that the rest of the system is “coming soon.”
+
+Worker Agents is the part where the processes actually get started.
+
+It can:
+
+- install and launch supported agent runtimes;
+- assign them private ports;
+- monitor their state;
+- expose their logs;
+- stop, restart, reinstall, and reconnect them;
+- route HTTP and WebSocket traffic by hostname;
+- provide a shared 9Router model gateway;
+- inject shared rules into agent workspaces;
+- install skills from the Worker Agents Skills Hub;
+- expose a browser-based file manager;
+- expose a Web VNC session;
+- forward public worker URLs through encoded ports when deployed behind `agentsweb.space`.
+
+In other words, it is a small process supervisor wearing a dashboard costume.
+
+## Included agents
+
+The exact available agents depend on the platform, installed dependencies, and the current alignment of the planets.
+
+The built-in catalog currently includes:
+
+| Agent | Default port | Description |
+|---|---:|---|
+| 9Router | `20128` | Shared OpenAI-compatible model router |
+| DeepSeek Harness | `3080` | DeepSeek web interface |
+| Codex Web Local | `18923` | Browser-accessible Codex-style workspace |
+| OpenCode | `18924` | OpenCode web interface |
+| Hermes WebUI | `18935` | Hermes agent interface |
+| Agent Zero | `18955` | Agent Zero web interface |
+| OpenClaw Gateway | `18789` | OpenClaw gateway |
+| File Browser | `18965` | Browser-based file access |
+| Web VNC | `18975` | Remote desktop access through the browser |
+
+Ports are starting points, not sacred scripture. If one is already occupied, Worker Agents searches nearby ports and tells you what happened.
+
+## Requirements
+
+- Node.js `>= 22`
+- npm
+- A Unix-like environment for the full experience
+- Internet access when an agent needs to install itself
+- Linux packages and privileges for Web VNC on Linux
+
+Windows support exists through PowerShell launchers. It is not forbidden. It is simply a different path through the forest.
+
+## Install
+
+```bash
+npm install
+```
+
+The install process prepares the owned 9Router dependency used by Worker Agents.
+
+Then run the control plane:
+
+```bash
 npm start
 ```
 
-Open [http://127.0.0.1:1456](http://127.0.0.1:1456). Congratulations: your terminal tabs may now unionize in peace.
+Open the dashboard:
 
-Worker Agents requires Node.js 22 or newer. `npm ci` installs the pinned local
-`9router-vibefin` package and runs its deterministic preparation hook.
-`npm run self-check` fails before startup when Node, the lockfile, the installed
-router, or the prepared middleware has drifted. Runtime `setup.js` repeats these
-checks and reports failures; it intentionally does not invoke privileged host
-deployment scripts or rewrite the running checkout.
+```text
+http://127.0.0.1:1456
+```
 
-Override the port when `1456` has already been claimed by mysterious forces:
+## Development mode
+
+For development with automatic restart:
 
 ```bash
-PORT=3000 npm start
+npm run dev
 ```
 
-## 🐳 Docker: Put the Chaos in a Box
+The server watches the source tree and restarts when files change, because manually restarting a process is apparently beneath us now.
 
-> **One script to build it, run it, and wait until it proves it has a pulse.**
+## Verify the installation
+
+Syntax checks:
 
 ```bash
-./scripts/docker-run.sh
+npm run check
 ```
 
-The script builds `worker-agents:local`, starts a `worker-agents` container, publishes only the dashboard port, persists state in a named volume, and waits for the `/api/status` health check. Local Open actions use stable agent subdomains such as `codex.localhost:1456` and `web-vnc.localhost:1456`; Worker Agents routes them to private container ports. Customize it with:
+Self-check:
 
 ```bash
-WORKER_AGENTS_PORT=3000 \
-WORKER_AGENTS_IMAGE=my-worker-agents:latest \
-WORKER_AGENTS_CONTAINER=my-worker-agents \
-./scripts/docker-run.sh
+npm run self-check
 ```
 
-## 🪟 Windows: PowerShell, but Make It Helpful
+Tests:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\start-windows.ps1
+```bash
+npm test
 ```
 
-The launcher checks Node.js 20+, npm, Git, Git Bash, and Python. If `winget` is available, it can install missing prerequisites instead of merely judging you.
+The useful minimum before reporting a successful installation is:
 
-Clean-start aliases are available when a runtime has achieved haunted-house status:
-
-```powershell
-npm run start:windows:clean-9router
-npm run start:windows:clean-opencode
-npm run start:windows:clean-all
+```bash
+npm run check
+npm test
+npm run self-check
 ```
 
-## 🧩 Add Your Own Worker
+A dashboard loading in a browser is nice. A dashboard loading while the underlying agents, router, proxy, and WebSocket paths work is better.
 
-Create a local `workers.json` file:
+## Starting agents
+
+Agents can be launched from the dashboard.
+
+The API also exposes agent lifecycle operations:
+
+```text
+POST /api/agents/:id/start
+POST /api/agents/:id/stop
+POST /api/agents/:id/restart
+POST /api/agents/:id/reinstall
+```
+
+For example:
+
+```bash
+curl -X POST http://127.0.0.1:1456/api/agents/opencode/start
+```
+
+The status endpoint is:
+
+```text
+GET /api/status
+```
+
+Example:
+
+```bash
+curl http://127.0.0.1:1456/api/status
+```
+
+The server reports the router, installed agents, current state, ports, URLs, and recent logs.
+
+“Installed” means installed.
+
+“Running” means running.
+
+“Working” means somebody actually opened it and received a response.
+
+These are three different things.
+
+## 9Router
+
+Worker Agents owns a local 9Router instance on port `20128`.
+
+The router exposes an OpenAI-compatible API, including:
+
+```text
+GET  /v1/models
+POST /v1/chat/completions
+```
+
+Check the model catalog:
+
+```bash
+curl http://127.0.0.1:20128/v1/models
+```
+
+The configured model catalog is shared with supported agents so that every interface does not invent its own model list and then quietly fail later.
+
+## Routing
+
+Locally, agent interfaces are available through stable hostnames such as:
+
+```text
+http://opencode.localhost:1456
+http://hermes.localhost:1456
+http://filebrowser.localhost:1456
+```
+
+The dashboard routes requests based on the hostname and forwards them to the agent’s current private port.
+
+This means an agent can move from one private port to another without requiring a new public URL every time it sneezes.
+
+When deployed behind the Worker Agents public broker, child ports are represented in the hostname:
+
+```text
+https://worker-name-18924.agentsweb.space
+```
+
+The port is decoded by Worker Agents and proxied to the corresponding local listener.
+
+The public URL is not magic. It requires:
+
+1. the agent to be installed;
+2. the agent to be running;
+3. the target port to be listening;
+4. the Worker Agents server to be reachable;
+5. the tunnel or broker registration to exist;
+6. the public hostname to resolve;
+7. the browser to receive an actual response.
+
+If one of those steps is missing, you get a page that looks like infrastructure.
+
+## Custom workers
+
+Custom workers can be declared in an untracked `workers.json` file at the repository root.
+
+Example:
 
 ```json
 [
   {
-    "id": "my-agent",
-    "name": "My Suspiciously Productive Agent",
-    "basePort": 19050,
-    "path": "/",
-    "command": "my-agent-web --host 127.0.0.1 --port {port}",
-    "readyPatterns": ["listening", "http://127.0.0.1:"]
+    "id": "my-worker",
+    "name": "My Worker",
+    "basePort": 19000,
+    "command": "node ./workers/my-worker.js --port {port}",
+    "readyPatterns": [
+      "listening",
+      "ready"
+    ]
   }
 ]
 ```
 
-`{port}` becomes an available port beginning at `basePort`. Restart the console, press Start, and pretend this was always the plan.
+Supported fields include:
 
-## 🏗️ How the Circus Is Arranged
+- `id`
+- `name`
+- `basePort`
+- `path`
+- `command`
+- `readyPatterns`
+
+Use `{port}` in the command when the worker needs to receive its assigned port.
+
+The file is intentionally untracked. Your local collection of questionable processes belongs to you.
+
+## Shared rules
+
+Worker Agents can reconcile shared rules into supported agent workspaces.
+
+The template is:
 
 ```text
-Browser dashboard
-       │ actions + status + logs
-       ▼
-Node.js control plane ─────► process supervisor
-       │                           │
-       ├──► auth and setup         ├──► agent commands
-       ├──► HTTP/WS proxies        ├──► ports and PIDs
-       └──► persisted state        └──► runtime output
+Rules.template.md
 ```
+
+Rules are meant to establish common behavior across agents instead of requiring every runtime to rediscover the same instructions independently.
+
+This is especially useful when several agent frontends share:
+
+- the same model router;
+- the same worker;
+- the same project directory;
+- the same public deployment;
+- the same expectations about tool usage and responses.
+
+A rule file is not a force field. An agent can still ignore it. At least now you can determine whether it was installed.
+
+## Skills Hub
+
+Worker Agents includes a local Skills Hub for discovering and managing agent skills.
+
+The skill system supports:
+
+- listing available skills;
+- searching for skills;
+- installing skills;
+- reading installed skill metadata;
+- removing skills;
+- checking the current baseline.
+
+The manifest is stored at:
 
 ```text
-.
-├── src/          # 🧠 Server, setup, auth, routing, supervision
-├── public/       # 🎛️ Browser mission control
-├── filebrowser/  # 📁 Built-in filesystem explorer
-├── scripts/      # 🔧 Windows, Docker, and publishing helpers
-├── wiki/         # 📚 Operational notes
-└── Dockerfile    # 🐳 Portable containment field
+skills/manifest.json
 ```
 
-## 🎯 Requirements
+Skills are installed into the configured Worker Agents environment and can then be reconciled into supported agents.
 
-- 🟢 **Node.js 20+** for local operation
-- 🐳 **Docker** for container operation
-- 🧰 Agent-specific tools only for the agents you choose to launch
-- ☕ A beverage for watching install logs scroll dramatically
+## File Browser
 
-## 🐛 Troubleshooting
+The File Browser agent provides browser-based access to the worker’s files.
 
-| 😱 Problem | 🧯 Fix |
-|---|---|
-| Port `1456` is busy | Run with `PORT=3000 npm start` |
-| 9Router remembers a past life | Run `npm run start:clean-9router` |
-| OpenCode needs a clean entrance | Run `npm run start:clean-opencode` |
-| Everything feels cursed | Run `npm run start:clean-all` |
-| Docker container looks sad | Run `docker logs worker-agents` |
+It is useful for:
 
-## 🤝 Contributing
+- downloading generated artifacts;
+- inspecting logs;
+- uploading files;
+- checking screenshots;
+- navigating work directories;
+- confirming that a process really created the thing it claimed to create.
 
-Issues and pull requests are welcome. Bring a reproducible bug, a useful agent preset, or a meme strong enough to survive code review.
+The File Browser is not a security boundary. Do not expose it publicly and then act surprised when the public discovers your files.
 
-## ⭐ Star This Repo
+## Web VNC
 
-If you believe AI agents deserve a proper control room instead of twelve terminals and a sticky note, **smash that star button**. ⭐
+Web VNC provides browser access to a graphical desktop session.
 
-<div align="center">
+On Linux, Worker Agents may install required desktop and VNC dependencies directly when running with sufficient privileges. On non-root systems, passwordless `sudo` may be required.
 
-**Built with Node.js, questionable optimism, and process IDs.** 🔬
+A successful HTTP response from the VNC page is not proof that the desktop connection works. The browser must establish the actual VNC/WebSocket session.
 
-*The agents are supervised. The humans remain an open issue.* 😏
+The final test is not “the HTML loaded.”
 
-</div>
+The final test is “the desktop is visible and the session stays connected.”
+
+## Docker
+
+The Docker launcher publishes the Worker Agents dashboard on port `1456`.
+
+```bash
+./scripts/docker-run.sh
+```
+
+Local agent routing continues through stable hostnames, allowing the dashboard to forward requests to the current private agent ports without requiring a separate Docker port mapping for every agent.
+
+Because mapping every port manually is how people end up maintaining a spreadsheet called `final-final-ports.xlsx`.
+
+## Windows
+
+PowerShell launchers are provided:
+
+```powershell
+npm run start:windows
+```
+
+Clean 9Router state:
+
+```powershell
+npm run start:windows:clean-9router
+```
+
+Clean OpenCode state:
+
+```powershell
+npm run start:windows:clean-opencode
+```
+
+Clean everything:
+
+```powershell
+npm run start:windows:clean-all
+```
+
+## Configuration
+
+Useful environment variables include:
+
+```text
+PORT
+AGENT_CONSOLE_PORT
+AGENT_CONSOLE_HOST
+AGENT_LAUNCH
+AGENT_AUTO_START
+AGENT_PORT_SCAN_RANGE
+WORKER_AGENTS_SOURCE
+WORKER_AGENTS_9ROUTER_NPM_PACKAGE
+OPENWORK_PUBLIC_HOST
+VITE_ALLOWED_HOSTS
+OPENCLAW_CONFIG_PATH
+HERMES_AGENT_DIR
+WEB_VNC_PASSWORD_FILE
+```
+
+The defaults are designed for local workers. Public deployments should configure their advertised hostname, proxy headers, authentication, and tunnel separately.
+
+Do not confuse a local working URL with a public working URL. They are related, but they are not the same animal.
+
+## Repository layout
+
+```text
+src/
+  server.js       HTTP server, dashboard, routing, and public API
+  agents.js       agent definitions, installation, supervision, and lifecycle
+  9router.js      9Router startup and model gateway integration
+  rules.js        shared rule reconciliation
+  skill-hub.js    skill discovery and installation
+  setup.js        host setup and SSH support
+  auth.js         authentication helpers
+  config.js       environment and runtime configuration
+
+public/
+  dashboard frontend
+
+scripts/
+  self-check and launch utilities
+
+test/
+  unit and integration tests
+
+wiki/
+  operational notes and deeper documentation
+```
+
+## License
+
+MIT. See [LICENSE](LICENSE).
