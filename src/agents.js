@@ -1010,7 +1010,7 @@ const builtInDefinitions = [
     })
   },
   {
-    id: 'codex-web-local',
+    id: 'codex',
     name: 'Codex Web Local',
     basePort: 18923,
     path: '/',
@@ -1075,7 +1075,7 @@ const builtInDefinitions = [
     })
   },
   {
-    id: 'hermes-webui',
+    id: 'hermes',
     name: 'Hermes WebUI',
     basePort: 18935,
     path: '/',

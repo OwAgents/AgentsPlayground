@@ -30,8 +30,8 @@ let selectedLogId = '';
 const agentIcons = {
   opencode: './icons/opencode.png',
   openclaw: './icons/openclaw.png',
-  'codex-web-local': './icons/codex.png',
-  'hermes-webui': './icons/hermes.png',
+  codex: './icons/codex.png',
+  hermes: './icons/hermes.png',
   openwork: './icons/openwork.png',
   'agent-zero': './icons/agent-zero.png',
   codex: './icons/codex.png',
@@ -40,9 +40,9 @@ const agentIcons = {
 };
 
 const blurbs = {
-  'codex-web-local': 'Chat and code with Codex in the browser.',
+  codex: 'Chat and code with Codex in the browser.',
   opencode: 'Open-source coding agent UI.',
-  'hermes-webui': 'Friendly multi-tool agent workspace.',
+  hermes: 'Friendly multi-tool agent workspace.',
   openwork: 'Headless OpenWork web UI.',
   'agent-zero': 'Autonomous research-style agent.',
   openclaw: 'Gateway for tools and sessions.',

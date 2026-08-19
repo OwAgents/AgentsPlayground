@@ -12,9 +12,9 @@ let state = { agents: [] };
 let selectedLogId = '';
 
 const agentIcons = {
-  'codex-web-local': '/icons/codex.png',
+  codex: '/icons/codex.png',
   opencode: '/icons/opencode.png',
-  'hermes-webui': '/icons/hermes.png',
+  hermes: '/icons/hermes.png',
   openwork: '/icons/openwork.png',
   'agent-zero': '/icons/agent-zero.png',
   openclaw: '/icons/openclaw.png'

@@ -86,7 +86,7 @@ PORT=3000 npm start
 ./scripts/docker-run.sh
 ```
 
-The script builds `worker-agents:local`, starts a `worker-agents` container, publishes only the dashboard port, persists state in a named volume, and waits for the `/api/status` health check. Local Open actions use stable agent subdomains such as `codex-web-local.localhost:1456` and `web-vnc.localhost:1456`; Worker Agents routes them to private container ports. Customize it with:
+The script builds `worker-agents:local`, starts a `worker-agents` container, publishes only the dashboard port, persists state in a named volume, and waits for the `/api/status` health check. Local Open actions use stable agent subdomains such as `codex.localhost:1456` and `web-vnc.localhost:1456`; Worker Agents routes them to private container ports. Customize it with:
 
 ```bash
 WORKER_AGENTS_PORT=3000 \

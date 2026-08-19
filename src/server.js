@@ -245,7 +245,11 @@ function publicAliasAgentIdFromRequest(req) {
   if (!hostname.endsWith('.agentsweb.space')) return '';
   const label = hostname.slice(0, -'.agentsweb.space'.length);
   if (!label || label.includes('.') || label.includes('-')) return '';
-  const aliases = { deepseek: 'deepseek-harness', hermes: 'hermes-webui' };
+  const aliases = {
+    codex: 'codex',
+    deepseek: 'deepseek-harness',
+    hermes: 'hermes'
+  };
   const id = aliases[label] || label;
   return supervisor.snapshot().find((agent) => localhostLabel(agent.id) === localhostLabel(id))?.id || '';
 }
@@ -573,7 +577,7 @@ async function handleRequest(req, res) {
       await exchangeCodeForTokens(code, state);
       // Restart Hermes WebUI so legacy auth callbacks still refresh the
       // on-disk default config, which now stays pinned to 9Router.
-      try { await supervisor.restart('hermes-webui'); } catch {}
+      try { await supervisor.restart('hermes'); } catch {}
       sendHtml(res, 200, '<!doctype html><meta charset="utf-8"><title>Signed in</title><script>location.href="/?dashboard=1"</script><p>Signed in. Returning to the console.</p>');
     } catch (error) {
       sendHtml(res, 500, `<!doctype html><meta charset="utf-8"><title>Login failed</title><p>Login failed: ${escapeHtml(error.message)}</p><p><a href="/">Return to console</a></p>`);
