@@ -1,6 +1,7 @@
 {
   "version": 1,
   "skills": [
-    { "name": "mcp-duckgo", "source": "aahl/skills@mcp-duckgo", "required": true }
+    { "name": "mcp-duckgo", "source": "aahl/skills@mcp-duckgo", "required": true },
+    { "name": "image-search", "source": "z0gsh1u/oh-my-writing-skill@image-search", "required": true }
   ]
 }
