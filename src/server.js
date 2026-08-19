@@ -648,7 +648,7 @@ async function handleRequest(req, res) {
     return;
   }
   // Launch mode: serve launch.html at / (unless ?dashboard=1)
-  if (config.launch && url.pathname === '/' && req.method === 'GET') {
+  if (config.launchIds.length === 1 && url.pathname === '/' && req.method === 'GET') {
     if (url.searchParams.get('dashboard') !== '1') {
       serveLaunchPage(res);
       return;
