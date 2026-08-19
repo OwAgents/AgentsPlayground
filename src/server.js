@@ -238,6 +238,18 @@ function localhostAgentIdFromRequest(req) {
   return supervisor.snapshot().find((agent) => localhostLabel(agent.id) === label)?.id || '';
 }
 
+function publicAliasAgentIdFromRequest(req) {
+  const hostname = String(req.headers.host || '')
+    .toLowerCase()
+    .replace(/:\d+$/, '');
+  if (!hostname.endsWith('.agentsweb.space')) return '';
+  const label = hostname.slice(0, -'.agentsweb.space'.length);
+  if (!label || label.includes('.') || label.includes('-')) return '';
+  const aliases = { deepseek: 'deepseek-harness', hermes: 'hermes-webui' };
+  const id = aliases[label] || label;
+  return supervisor.snapshot().find((agent) => localhostLabel(agent.id) === localhostLabel(id))?.id || '';
+}
+
 function encodedPortFromRequest(req) {
   const routedPort = Number.parseInt(String(req.headers['x-agentsweb-target-port'] || ''), 10);
   if (routedPort >= 1 && routedPort <= 65535) return routedPort;
@@ -381,8 +393,8 @@ function statusPayload(req) {
   const origin = requestOrigin(req);
   const router = publicRouter(nineRouter.getStatus(), origin);
   const agents = supervisor.snapshot().map((agent) => publicAgent(agent, origin));
-  const filtered = config.launch
-    ? agents.filter((a) => a.id === config.launch)
+  const filtered = config.launchIds.length === 1
+    ? agents.filter((a) => a.id === config.launchIds[0])
     : agents;
   return {
     version: buildVersion,
@@ -500,6 +512,11 @@ async function handleRequest(req, res) {
   const encodedPort = encodedPortFromRequest(req);
   if (encodedPort && encodedPort !== config.port) {
     proxyPortHttp(req, res, encodedPort);
+    return;
+  }
+  const publicAliasAgentId = publicAliasAgentIdFromRequest(req);
+  if (publicAliasAgentId) {
+    proxyAgentHttp(req, res, publicAliasAgentId);
     return;
   }
   const localhostAgentId = localhostAgentIdFromRequest(req);
@@ -664,6 +681,11 @@ server.on('upgrade', (req, socket) => {
     proxyPortUpgrade(req, socket, encodedPort);
     return;
   }
+  const publicAliasAgentId = publicAliasAgentIdFromRequest(req);
+  if (publicAliasAgentId) {
+    proxyAgentUpgrade(req, socket, publicAliasAgentId);
+    return;
+  }
   const localhostAgentId = localhostAgentIdFromRequest(req);
   if (localhostAgentId) {
     if (localhostAgentId === 'openclaw') handleOpenClawUpgrade(req, socket);
@@ -735,14 +757,14 @@ try {
     console.error('[9router] Startup error:', error.message);
     return { state: 'error', livePort: 0 };
   });
-  if (config.launch) {
-    if (supervisor.agents.has(config.launch)) {
-      console.log(`Launch mode: auto-starting agent "${config.launch}"...`);
-      supervisor.start(config.launch).catch((error) => {
-        console.error(`Launch mode: failed to start "${config.launch}":`, error.message);
+  for (const id of config.launchIds) {
+    if (supervisor.agents.has(id)) {
+      console.log(`Launch mode: auto-starting agent "${id}"...`);
+      supervisor.start(id).catch((error) => {
+        console.error(`Launch mode: failed to start "${id}":`, error.message);
       });
     } else {
-      console.error(`Launch mode: unknown agent "${config.launch}". Available: ${Array.from(supervisor.agents.keys()).join(', ')}`);
+      console.error(`Launch mode: unknown agent "${id}". Available: ${Array.from(supervisor.agents.keys()).join(', ')}`);
     }
   }
   if (config.autoStartAll) {

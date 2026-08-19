@@ -20,8 +20,9 @@ export function expandHome(value) {
 export const config = Object.freeze({
   projectRoot,
   host: process.env.AGENT_CONSOLE_HOST || (process.platform === 'win32' ? '127.0.0.1' : 'localhost'),
-  // Launch mode is opt-in; unset or empty AGENT_LAUNCH means no auto-launch.
+  // Launch mode is opt-in; a comma-separated value starts selected agents.
   launch: process.env.AGENT_LAUNCH || '',
+  launchIds: (process.env.AGENT_LAUNCH || '').split(',').map((id) => id.trim()).filter(Boolean),
   // Auto-start every agent on boot. Each agent installs itself via its
   // beforeStart hook before the process is spawned.
   autoStartAll: process.env.AGENT_AUTO_START_ALL === '1',
