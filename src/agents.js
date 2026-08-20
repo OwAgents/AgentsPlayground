@@ -607,7 +607,7 @@ async function ensureFileBrowserInstalled(log) {
   if (process.platform === 'linux' && !fs.existsSync('/usr/include/fuse/fuse.h') && commandExists('apt-get')) {
     const elevate = typeof process.getuid === 'function' && process.getuid() === 0 ? '' : 'sudo -n ';
     log('[filebrowser] installing Linux FUSE build/runtime dependencies for lazy browser folder mounts');
-    await runCommand(`${elevate}apt-get update && ${elevate}apt-get install -y --no-install-recommends libfuse-dev libfuse2 build-essential python3 pkg-config`, { onData: log });
+    await runCommand(`${elevate}apt-get install -y --no-install-recommends libfuse-dev libfuse2 build-essential python3 pkg-config`, { onData: log });
   }
   const marker = path.join(dir, 'node_modules', '.worker-agents-installed');
   const lockPath = path.join(dir, 'package-lock.json');
