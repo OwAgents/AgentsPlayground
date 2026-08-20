@@ -37,6 +37,69 @@ function agentLogFileFor(agentId) {
   return `/tmp/agent-console-agent-${agentId}.log`;
 }
 
+function agentStateDir() {
+  return process.env.WORKER_AGENTS_STATE_DIR || path.join(os.homedir(), '.worker-agents', 'agents');
+}
+
+function agentStateFileFor(agentId) {
+  return path.join(agentStateDir(), `${agentId}.json`);
+}
+
+function writeAgentState(agentId, state) {
+  fs.mkdirSync(agentStateDir(), { recursive: true, mode: 0o700 });
+  const target = agentStateFileFor(agentId);
+  const temporary = `${target}.${process.pid}.tmp`;
+  fs.writeFileSync(temporary, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
+  fs.renameSync(temporary, target);
+}
+
+function removeAgentState(agentId) {
+  try { fs.unlinkSync(agentStateFileFor(agentId)); } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+}
+
+function readAgentState(agentId) {
+  try {
+    return JSON.parse(fs.readFileSync(agentStateFileFor(agentId), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function processGroupAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(process.platform === 'win32' ? pid : -pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readAgentLogTail(agentId) {
+  try {
+    const filePath = agentLogFileFor(agentId);
+    const stat = fs.statSync(filePath);
+    const maxBytes = 512 * 1024;
+    const length = Math.min(stat.size, maxBytes);
+    const buffer = Buffer.alloc(length);
+    const fd = fs.openSync(filePath, 'r');
+    try {
+      fs.readSync(fd, buffer, 0, length, stat.size - length);
+    } finally {
+      fs.closeSync(fd);
+    }
+    return stripAnsi(buffer.toString('utf8'))
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .slice(-config.logLimit)
+      .map((line) => line.length > 8192 ? `${line.slice(0, 8192)}... [truncated]` : line);
+  } catch {
+    return [];
+  }
+}
+
 function commandFromEnv(envName, fallback) {
   return process.env[envName] || fallback;
 }
@@ -1230,7 +1293,7 @@ const builtInDefinitions = [
 
 const definitions = [...builtInDefinitions, ...loadCustomWorkerDefinitions()];
 
-class AgentRuntime {
+export class AgentRuntime {
   constructor(definition, notify) {
     this.definition = definition;
     this.notify = notify;
@@ -1242,12 +1305,22 @@ class AgentRuntime {
     this.error = '';
     this.startedAt = '';
     this.command = '';
+    this.logWatcher = null;
+    this.logNotifyTimer = null;
   }
 
   snapshot(includeLogs = true) {
+    if (this.state === 'running' && !this.process && !processGroupAlive(this.pid)) {
+      this.state = 'stopped';
+      this.pid = null;
+      this.error = '';
+      this.stopWatchingPersistentLog();
+      removeAgentState(this.definition.id);
+    }
     const url = this.definition.url
       ? this.definition.url(this.port)
       : `http://${browserHost}:${this.port}${this.definition.path}`;
+    const persistedLogs = includeLogs ? readAgentLogTail(this.definition.id) : [];
     return {
       id: this.definition.id,
       name: this.definition.name,
@@ -1259,7 +1332,7 @@ class AgentRuntime {
       startedAt: this.startedAt,
       command: this.command,
       proxied: Boolean(this.definition.proxied),
-      logs: includeLogs ? this.logs : undefined
+      logs: includeLogs ? (persistedLogs.length ? persistedLogs : this.logs) : undefined
     };
   }
 
@@ -1278,6 +1351,30 @@ class AgentRuntime {
       // Keep the live UI working even if the diagnostic file cannot be written.
     }
     this.notify({ type: 'log', agentId: this.definition.id });
+  }
+
+  watchPersistentLog() {
+    this.stopWatchingPersistentLog();
+    try {
+      this.logWatcher = fs.watch(agentLogFileFor(this.definition.id), () => {
+        if (this.logNotifyTimer) return;
+        this.logNotifyTimer = setTimeout(() => {
+          this.logNotifyTimer = null;
+          this.notify({ type: 'log', agentId: this.definition.id });
+        }, 100);
+      });
+      this.logWatcher.on('error', () => this.stopWatchingPersistentLog());
+      this.logWatcher.unref?.();
+    } catch {
+      this.logWatcher = null;
+    }
+  }
+
+  stopWatchingPersistentLog() {
+    if (this.logWatcher) this.logWatcher.close();
+    this.logWatcher = null;
+    if (this.logNotifyTimer) clearTimeout(this.logNotifyTimer);
+    this.logNotifyTimer = null;
   }
 
   markRunning() {
@@ -1326,6 +1423,13 @@ class AgentRuntime {
     this.notify({ type: 'state', agentId: this.definition.id });
 
     try {
+      fs.mkdirSync(path.dirname(agentLogFileFor(this.definition.id)), { recursive: true });
+      fs.writeFileSync(agentLogFileFor(this.definition.id), '', { mode: 0o600 });
+    } catch {
+      // The in-memory log remains available when the persistent log is unavailable.
+    }
+
+    try {
       await this.definition.reclaimPort?.((chunk) => {
         const lines = String(chunk).split(/\r?\n/);
         for (const line of lines) if (line) this.log(line);
@@ -1353,41 +1457,67 @@ class AgentRuntime {
         : shell.toLowerCase().includes('cmd.exe')
           ? ['/d', '/s', '/c', this.command]
           : ['-lc', this.command];
-      const child = spawn(shell, shellArgs, {
-        detached: process.platform !== 'win32',
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: this.definition.env?.(this.port) || buildBaseEnv()
-      });
-      this.process = child;
-      this.pid = child.pid;
-
-      this.pipeOutput(child, child.stdout);
-      this.pipeOutput(child, child.stderr);
-
-      child.once('error', (error) => {
-        this.error = error.message;
-        this.state = 'error';
-        this.log(`Error: ${error.message}`);
-        this.notify({ type: 'state', agentId: this.definition.id });
-      });
-
-      child.once('exit', (code, signal) => {
-        const wasStopping = this.state === 'stopping';
-        this.process = null;
-        this.pid = null;
-        const path = this.definition.readyPath ?? this.definition.path ?? '/';
-        const readyUrl = `http://127.0.0.1:${this.port}${path}`;
-        const allowRecovery = process.platform === 'win32' && !wasStopping;
-        this.state = wasStopping ? 'stopped' : code === 0 ? 'stopped' : 'error';
-        this.error = this.state === 'error' ? `Process exited with code ${code ?? 'null'} signal ${signal ?? 'null'}` : '';
-        this.log(`Process exited with code ${code ?? 'null'} signal ${signal ?? 'null'}`);
-        this.notify({ type: 'state', agentId: this.definition.id });
-        if (allowRecovery && this.state === 'error') {
-          this.recoverDetachedService(readyUrl).catch(() => {});
+      const persistent = process.platform !== 'win32';
+      let logFd = null;
+      try {
+        if (persistent) logFd = fs.openSync(agentLogFileFor(this.definition.id), 'a', 0o600);
+        const child = spawn(shell, shellArgs, {
+          detached: persistent,
+          stdio: persistent ? ['ignore', logFd, logFd] : ['ignore', 'pipe', 'pipe'],
+          env: this.definition.env?.(this.port) || buildBaseEnv()
+        });
+        if (logFd !== null) {
+          fs.closeSync(logFd);
+          logFd = null;
         }
-      });
+        this.process = child;
+        this.pid = child.pid;
 
-      this.waitForReady(child);
+        if (persistent) child.unref();
+        else {
+          this.pipeOutput(child, child.stdout);
+          this.pipeOutput(child, child.stderr);
+        }
+        writeAgentState(this.definition.id, {
+          id: this.definition.id,
+          port: this.port,
+          pid: this.pid,
+          command: this.command,
+          startedAt: nowIso()
+        });
+        if (persistent) this.watchPersistentLog();
+
+        child.once('error', (error) => {
+          this.error = error.message;
+          this.state = 'error';
+          this.log(`Error: ${error.message}`);
+          removeAgentState(this.definition.id);
+          this.notify({ type: 'state', agentId: this.definition.id });
+        });
+
+        child.once('exit', (code, signal) => {
+          if (this.process !== child) return;
+          const wasStopping = this.state === 'stopping';
+          this.process = null;
+          this.pid = null;
+          const path = this.definition.readyPath ?? this.definition.path ?? '/';
+          const readyUrl = `http://127.0.0.1:${this.port}${path}`;
+          const allowRecovery = process.platform === 'win32' && !wasStopping;
+          this.state = wasStopping ? 'stopped' : code === 0 ? 'stopped' : 'error';
+          this.error = this.state === 'error' ? `Process exited with code ${code ?? 'null'} signal ${signal ?? 'null'}` : '';
+          this.log(`Process exited with code ${code ?? 'null'} signal ${signal ?? 'null'}`);
+          this.stopWatchingPersistentLog();
+          removeAgentState(this.definition.id);
+          this.notify({ type: 'state', agentId: this.definition.id });
+          if (allowRecovery && this.state === 'error') {
+            this.recoverDetachedService(readyUrl).catch(() => {});
+          }
+        });
+
+        this.waitForReady(child);
+      } finally {
+        if (logFd !== null) fs.closeSync(logFd);
+      }
     } catch (error) {
       this.state = 'error';
       this.error = error.message;
@@ -1395,6 +1525,31 @@ class AgentRuntime {
       this.notify({ type: 'state', agentId: this.definition.id });
     }
     return this.snapshot();
+  }
+
+  async reconcile() {
+    const persisted = readAgentState(this.definition.id);
+    if (!persisted) return { id: this.definition.id, adopted: false };
+    const port = Number.parseInt(persisted.port, 10);
+    const pid = Number.parseInt(persisted.pid, 10);
+    const validPort = port >= this.definition.basePort && port < this.definition.basePort + config.portScanRange;
+    const readyPath = this.definition.readyPath ?? this.definition.path ?? '/';
+    const readyUrl = `http://127.0.0.1:${port}${readyPath}`;
+    if (!validPort || !processGroupAlive(pid) || !(await isHttpReady(readyUrl))) {
+      removeAgentState(this.definition.id);
+      return { id: this.definition.id, adopted: false };
+    }
+    this.port = port;
+    this.pid = pid;
+    this.process = null;
+    this.command = persisted.command || this.definition.command(port);
+    this.startedAt = persisted.startedAt || '';
+    this.state = 'running';
+    this.error = '';
+    this.watchPersistentLog();
+    this.log(`Adopted existing process group ${pid} on port ${port} after console restart`);
+    this.notify({ type: 'state', agentId: this.definition.id });
+    return { id: this.definition.id, adopted: true, pid, port };
   }
 
   pipeOutput(child, stream) {
@@ -1467,33 +1622,39 @@ class AgentRuntime {
   }
 
   async stop() {
-    if (!this.process || this.state === 'stopped') {
+    if ((!this.process && !this.pid) || this.state === 'stopped') {
       this.state = 'stopped';
+      this.pid = null;
+      this.stopWatchingPersistentLog();
+      removeAgentState(this.definition.id);
       this.notify({ type: 'state', agentId: this.definition.id });
       return this.snapshot();
     }
     const child = this.process;
+    const pid = this.pid;
     this.state = 'stopping';
     this.log('Stopping...');
     this.notify({ type: 'state', agentId: this.definition.id });
 
     try {
-      process.kill(-child.pid, 'SIGTERM');
+      process.kill(-pid, 'SIGTERM');
     } catch {
       try {
-        child.kill('SIGTERM');
+        if (child) child.kill('SIGTERM');
+        else process.kill(pid, 'SIGTERM');
       } catch {
         // Process may have already exited.
       }
     }
 
     await new Promise((resolve) => setTimeout(resolve, 1500));
-    if (this.process === child) {
+    if (processGroupAlive(pid)) {
       try {
-        process.kill(-child.pid, 'SIGKILL');
+        process.kill(-pid, 'SIGKILL');
       } catch {
         try {
-          child.kill('SIGKILL');
+          if (child) child.kill('SIGKILL');
+          else process.kill(pid, 'SIGKILL');
         } catch {
           // Process may have already exited.
         }
@@ -1502,6 +1663,8 @@ class AgentRuntime {
     this.process = null;
     this.pid = null;
     this.state = 'stopped';
+    this.stopWatchingPersistentLog();
+    removeAgentState(this.definition.id);
     this.notify({ type: 'state', agentId: this.definition.id });
     return this.snapshot();
   }
@@ -1518,6 +1681,15 @@ class AgentSupervisor extends EventEmitter {
 
   snapshot() {
     return Array.from(this.agents.values()).map((agent) => agent.snapshot());
+  }
+
+  async reconcile() {
+    const results = [];
+    for (const [id, agent] of this.agents) {
+      const result = await agent.reconcile();
+      if (result.adopted) results.push(result);
+    }
+    return results;
   }
 
   get(id) {

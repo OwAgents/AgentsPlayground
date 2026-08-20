@@ -11,6 +11,7 @@ import { supervisor } from './agents.js';
 import { ensureSshd, runSetup, getSetupStatus, onSetupEvent } from './setup.js';
 import { baselineStatus, installSkill, listInstalledSkills, readInstalledSkill, removeSkill, searchSkills } from './skill-hub.js';
 import { rulesService } from './rules.js';
+import { guardProxySockets } from './proxy-sockets.js';
 
 const publicDir = path.join(config.projectRoot, 'public');
 const workerPackage = JSON.parse(fs.readFileSync(path.join(config.projectRoot, 'package.json'), 'utf8'));
@@ -298,9 +299,9 @@ function proxyPortUpgrade(req, socket, port) {
     }
     lines.push('\r\n');
     upstream.write(lines.join('\r\n'));
-    socket.pipe(upstream).pipe(socket);
+    guarded.bridge();
   });
-  upstream.on('error', () => socket.end('HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n'));
+  const guarded = guardProxySockets(req, socket, upstream, { route: 'encoded-port', target: String(port) });
 }
 
 function proxyAgentHttp(req, res, id, prefix = '') {
@@ -338,9 +339,9 @@ function proxyAgentUpgrade(req, socket, id, prefix = '') {
     }
     lines.push('\r\n');
     upstream.write(lines.join('\r\n'));
-    socket.pipe(upstream).pipe(socket);
+    guarded.bridge();
   });
-  upstream.on('error', () => socket.end('HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n'));
+  const guarded = guardProxySockets(req, socket, upstream, { route: 'agent', target: id });
 }
 
 function handleOpenClawUpgrade(req, socket) {
@@ -369,11 +370,9 @@ function handleOpenClawUpgrade(req, socket) {
     }
     lines.push('\r\n');
     upstream.write(lines.join('\r\n'));
-    socket.pipe(upstream).pipe(socket);
+    guarded.bridge();
   });
-  upstream.on('error', () => {
-    socket.end('HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n');
-  });
+  const guarded = guardProxySockets(req, socket, upstream, { route: 'openclaw', target: 'openclaw' });
 }
 
 async function findAvailablePort(basePort, maxRange) {
@@ -679,6 +678,11 @@ const server = http.createServer((req, res) => {
   });
 });
 
+server.on('clientError', (error, socket) => {
+  console.warn(`[http] ${JSON.stringify({ event: 'client_socket_error', code: error.code || '', message: error.message })}`);
+  if (!socket.destroyed && socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
+});
+
 server.on('upgrade', (req, socket) => {
   const encodedPort = encodedPortFromRequest(req);
   if (encodedPort && encodedPort !== config.port) {
@@ -746,7 +750,11 @@ try {
   // Idempotent filesystem preflight (non-fatal)
   runSetup().catch((error) => {
     console.error('[setup] Preflight error:', error.message);
-  }).then(() => {
+  }).then(async () => {
+  const adopted = await supervisor.reconcile();
+  for (const agent of adopted) {
+    console.log(`[supervisor] Adopted ${agent.id} pid ${agent.pid} on port ${agent.port}`);
+  }
   const rulesPayload = rulesService.inject();
   for (const adapter of rulesPayload.adapters) {
     if (adapter.error) console.warn(`[rules] ${adapter.id}: ${adapter.error}`);
