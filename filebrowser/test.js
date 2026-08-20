@@ -73,6 +73,7 @@ async function runTests() {
   assert.strictEqual(explorerRes.status, 200, 'GET / should return Explorer');
   assert.ok(explorerRes.raw.includes('File Explorer'), 'Explorer UI should render at /');
   assert.ok(explorerRes.raw.includes('Mount local folder'), 'Explorer should expose the lazy browser folder mount action');
+  assert.ok(explorerRes.raw.includes('Snapshot picker'), 'Explorer should expose the compatible folder snapshot picker');
   assert.ok(explorerRes.raw.includes('showDirectoryPicker'), 'Explorer should use the browser File System Access API');
   const inlineScripts = Array.from(explorerRes.raw.matchAll(/<script>([\s\S]*?)<\/script>/g), (match) => match[1]);
   assert.ok(inlineScripts.length > 0, 'Explorer should contain its browser application script');

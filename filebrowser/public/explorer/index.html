@@ -262,6 +262,7 @@
   <div class="mount-strip" id="mount-strip">
     <i class="fa-solid fa-cloud-arrow-down"></i>
     <span class="mount-message" id="mount-message">Local folders stay on your computer; file bytes cross the network only when the worker reads them.</span>
+    <button id="mount-compatible">Snapshot picker</button>
     <button id="mount-open" style="display:none;">Open mount</button>
     <button id="mount-stop" style="display:none;">Unmount</button>
   </div>
@@ -352,6 +353,7 @@
     const mountFolderInput = document.getElementById('mount-folder-input');
     const mountStrip = document.getElementById('mount-strip');
     const mountMessage = document.getElementById('mount-message');
+    const mountCompatible = document.getElementById('mount-compatible');
     const mountOpen = document.getElementById('mount-open');
     const mountStop = document.getElementById('mount-stop');
     let browserMount = null;
@@ -520,6 +522,7 @@
       mountStrip.classList.toggle('error', state === 'error');
       mountMessage.innerHTML = message;
       mountButton.disabled = mountCapability?.supported === false || ['connecting', 'mounting', 'mounted'].includes(state);
+      mountCompatible.style.display = mountCapability?.supported !== false && !['connecting', 'mounting', 'mounted'].includes(state) ? 'inline' : 'none';
       mountOpen.style.display = state === 'mounted' ? 'inline' : 'none';
       mountStop.style.display = ['connecting', 'mounting', 'mounted'].includes(state) ? 'inline' : 'none';
     }
@@ -876,6 +879,7 @@
     };
 
     mountButton.onclick = chooseAndMountFolder;
+    mountCompatible.onclick = () => mountFolderInput.click();
     mountFolderInput.onchange = async () => {
       if (!mountFolderInput.files.length) return;
       try {

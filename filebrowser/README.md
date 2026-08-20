@@ -48,7 +48,9 @@ the build/runtime dependencies before it installs File Browser. The selected
 folder remains on the browser's computer and is available only while that page
 stays connected. Chrome and Edge use `showDirectoryPicker()`; other browsers
 fall back to a `webkitdirectory` session snapshot. Both paths defer file-content
-transfer until a file is read. The mount is deliberately read-only.
+transfer until a file is read. Chromium users can explicitly choose **Snapshot
+picker** when native directory handles are unavailable or undesirable. The mount
+is deliberately read-only.
 
 Configuration:
 
