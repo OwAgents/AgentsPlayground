@@ -43,6 +43,11 @@ async function waitForServer(proc, logs) {
 async function runTests() {
   console.log('Running automated backend sanity verification...');
 
+  const serverSource = require('fs').readFileSync(path.join(__dirname, 'server.js'), 'utf8');
+  assert.ok(!/fs\.(?:existsSync|statSync|mkdirSync)\s*\(/.test(serverSource),
+    'HTTP request paths must not use synchronous filesystem calls that deadlock browser-backed FUSE mounts');
+  console.log('✔ Request handlers avoid synchronous filesystem calls on FUSE paths');
+
   const storageRoot = path.resolve(process.env.STORAGE_DIR || '/');
   const appRel = path.relative(storageRoot, __dirname);
   const appRelParts = appRel ? appRel.split(path.sep) : [];
