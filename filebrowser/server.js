@@ -1,11 +1,14 @@
 const express = require('express');
 const fs = require('fs');
+const http = require('http');
 const os = require('os');
 const path = require('path');
 const multer = require('multer');
+const { BrowserMountManager } = require('./browser-mounts');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const browserMounts = new BrowserMountManager();
 
 // Root directory for file browsing. Defaults to the filesystem root so the
 // browser has full access to the system; set STORAGE_DIR to serve a subtree.
@@ -207,6 +210,29 @@ app.post('/api/upload', upload.array('files'), (req, res) => {
   res.json({ success: true, count: req.files ? req.files.length : 0 });
 });
 
+// API: Lazy, read-only browser folder mounts. File bytes stay in the browser
+// until a process on the worker reads the corresponding FUSE path.
+app.get('/api/browser-mounts', (_req, res) => {
+  res.json({ capability: browserMounts.capability(), mounts: browserMounts.list() });
+});
+
+app.post('/api/browser-mounts', (req, res) => {
+  try {
+    const session = browserMounts.createSession(req.body?.name);
+    res.status(201).json({ ok: true, ...session });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/browser-mounts/:id', async (req, res) => {
+  if (!browserMounts.sessions.has(req.params.id)) {
+    return res.status(404).json({ error: 'Browser folder mount not found.' });
+  }
+  await browserMounts.stopSession(req.params.id, 'Unmounted from File Browser.');
+  return res.json({ ok: true });
+});
+
 // API: Default path for a fresh Explorer load.
 app.get('/api/start', (req, res) => {
   res.json({ path: START_PATH });
@@ -251,11 +277,31 @@ app.get('/edit/*', (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+const server = http.createServer(app);
+
+server.on('upgrade', (req, socket, head) => {
+  if (browserMounts.handleUpgrade(req, socket, head)) return;
+  socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
+});
+
+async function shutdown() {
+  await browserMounts.stopAll();
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(1), 5000).unref();
+}
+
+process.once('SIGINT', shutdown);
+process.once('SIGTERM', shutdown);
+
+server.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
   console.log(`Serving filesystem root: ${ROOT_DIR}`);
   console.log(`Default start directory: ${START_PATH || ROOT_DIR}`);
   console.log(`File Explorer: http://localhost:${PORT}/`);
   console.log(`Browse directory: http://localhost:${PORT}/browse/<path>`);
   console.log(`Edit text file: http://localhost:${PORT}/edit/<path>`);
+  const mountCapability = browserMounts.capability();
+  console.log(mountCapability.supported
+    ? `Browser folder mounts: ${mountCapability.mountRoot}`
+    : `Browser folder mounts unavailable: ${mountCapability.error}`);
 });

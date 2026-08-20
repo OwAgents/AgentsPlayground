@@ -1,7 +1,7 @@
 FROM node:20-bookworm-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git openssh-client procps \
+    && apt-get install -y --no-install-recommends git openssh-client procps libfuse2 libfuse-dev build-essential python3 pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -9,6 +9,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY filebrowser/package.json filebrowser/package-lock.json ./filebrowser/
 RUN npm ci --omit=dev && npm --prefix filebrowser ci --omit=dev
+
+RUN apt-get purge -y --auto-remove libfuse-dev build-essential pkg-config \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY . .
 

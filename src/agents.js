@@ -604,11 +604,29 @@ async function ensureFileBrowserInstalled(log) {
   if (!fs.existsSync(packageJson)) {
     throw new Error(`File Browser bundle is missing at ${dir}`);
   }
+  if (process.platform === 'linux' && !fs.existsSync('/usr/include/fuse/fuse.h') && commandExists('apt-get')) {
+    const elevate = typeof process.getuid === 'function' && process.getuid() === 0 ? '' : 'sudo -n ';
+    log('[filebrowser] installing Linux FUSE build/runtime dependencies for lazy browser folder mounts');
+    await runCommand(`${elevate}apt-get update && ${elevate}apt-get install -y --no-install-recommends libfuse-dev libfuse2 build-essential python3 pkg-config`, { onData: log });
+  }
   const marker = path.join(dir, 'node_modules', '.worker-agents-installed');
-  if (!fs.existsSync(marker)) {
-    await runCommand(`cd "${dir}" && npm install`, { onData: log });
+  const lockPath = path.join(dir, 'package-lock.json');
+  const fuseBindingLoads = process.platform !== 'linux' || await runCommand(
+    `cd "${dir}" && node -e "require('@cocalc/fuse-native')"`
+  ).then(() => true, () => false);
+  const needsInstall = !fs.existsSync(marker)
+    || (fs.existsSync(lockPath) && fs.statSync(lockPath).mtimeMs > fs.statSync(marker).mtimeMs)
+    || !fuseBindingLoads;
+  if (needsInstall) {
+    await runCommand(`cd "${dir}" && npm install --include=optional`, { onData: log });
     fs.mkdirSync(path.dirname(marker), { recursive: true });
     fs.writeFileSync(marker, `${new Date().toISOString()}\n`, { mode: 0o600 });
+  }
+  if (process.platform === 'linux' && fs.existsSync('/dev/fuse')) {
+    await runCommand(`cd "${dir}" && node -e "require('@cocalc/fuse-native')"`, { onData: log });
+  }
+  if (process.platform === 'linux' && !fs.existsSync('/dev/fuse')) {
+    log('[filebrowser] /dev/fuse is absent; File Browser will run but local browser folder mounting is unavailable');
   }
   return dir;
 }
