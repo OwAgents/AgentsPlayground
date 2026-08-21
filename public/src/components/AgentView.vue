@@ -93,6 +93,12 @@ function agentUrl(agent: Agent) {
     source.protocol = 'https:'
     source.hostname = `${rawBase}-${agent.port}${suffix}`
     source.port = ''
+  } else if (current.hostname === 'localhost' && current.port === '1456') {
+    // The local Worker Agents server routes agent labels on the dashboard
+    // port. Do not expose an agent's private listener port in the link.
+    source.protocol = current.protocol
+    source.hostname = `${agent.id}.localhost`
+    source.port = current.port
   } else {
     source.protocol = current.protocol
     source.hostname = current.hostname

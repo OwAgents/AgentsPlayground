@@ -18,6 +18,8 @@ If `PORT` or `AGENT_CONSOLE_PORT` is set, it will use that instead.
 
 ![Worker Agents dashboard showing agent controls and runtime states](docs/images/dashboard.jpg)
 
+The screenshot is real. The green “Running” indicator is also real. The stopped agent is included for documentary accuracy.
+
 Most “agent dashboard” garbage is either:
 
 - some overengineered Electron abomination;
@@ -26,7 +28,7 @@ Most “agent dashboard” garbage is either:
 
 This one is different.
 
-Worker Agents on GitHub is a dead-simple Node control plane that just starts and supervises your local agent UIs.
+[Worker Agents on GitHub](https://github.com/replypaldevs/agent-workspace/tree/main/workerAgents) is a dead-simple Node control plane that just starts and supervises your local agent UIs.
 
 One web dashboard. You click start. It shows PID, port, logs, and status. You can restart things without copy-pasting 40-character commands like a caveman.
 
@@ -39,6 +41,8 @@ Built-in presets for:
 - Hermes WebUI
 
 You can throw any random worker in via `workers.json` and it just works. Port allocation is automatic. Ready-patterns let it know when the thing is up instead of guessing.
+
+Forked from a Hermes-on-Android console, with the Android-specific machinery stripped out. No Gradle, no APK, no Play Store nonsense. Just the useful Node supervisor left.
 
 ```bash
 npm install && npm start
@@ -225,6 +229,20 @@ curl http://127.0.0.1:20128/v1/models
 
 The configured model catalog is shared with supported agents so that every interface does not invent its own model list and then quietly fail later.
 
+If the router becomes haunted, there are clean-start commands:
+
+```bash
+npm run start:clean-9router
+```
+
+To clean both 9Router and OpenCode state:
+
+```bash
+npm run start:clean-all
+```
+
+These commands remove local runtime state. Use them when you mean it.
+
 ## Routing
 
 Locally, agent interfaces are available through stable hostnames such as:
@@ -367,8 +385,16 @@ The final test is “the desktop is visible and the session stays connected.”
 The Docker launcher publishes the Worker Agents dashboard on port `1456`.
 
 ```bash
-./scripts/docker-run.sh
+./scripts/docker-run.sh a3
 ```
+
+Each container gets a private in-memory `/data` filesystem. Docker workers do
+not share state, and replacing a container discards its Worker Agents state.
+The required name publishes the dashboard through the canonical broker at
+`https://<name>.agentsweb.space` and makes it visible to broker health discovery.
+The same FRP registration routes `https://<name>-<port>.agentsweb.space` to that
+port inside the container, including HTTP, WebSocket, and SSE traffic. It does
+not create one tunnel or Docker host-port mapping per child service.
 
 Local agent routing continues through stable hostnames, allowing the dashboard to forward requests to the current private agent ports without requiring a separate Docker port mapping for every agent.
 
@@ -450,6 +476,75 @@ wiki/
   operational notes and deeper documentation
 ```
 
+## Troubleshooting
+
+### The dashboard loads but the agent does not
+
+Check:
+
+```bash
+curl http://127.0.0.1:1456/api/status
+```
+
+Then inspect the agent logs in the dashboard or the corresponding `/tmp` log file.
+
+### The agent says it is running but the browser cannot connect
+
+Check the actual port:
+
+```bash
+lsof -nP -iTCP -sTCP:LISTEN
+```
+
+Then verify the agent directly on its private port.
+
+A process ID is not a response.
+
+### 9Router has no models
+
+Check:
+
+```bash
+curl http://127.0.0.1:20128/v1/models
+```
+
+If the router is stale:
+
+```bash
+npm run start:clean-9router
+```
+
+### A public encoded URL returns an error
+
+Verify, in order:
+
+1. the local agent is running;
+2. the encoded port matches the intended agent;
+3. the public worker registration exists;
+4. the tunnel is connected;
+5. the broker has the expected hostname;
+6. the agent itself responds when reached locally.
+
+The hostname may be correct while the process behind it is dead. DNS is not necromancy.
+
+## Contributing
+
+Before submitting changes:
+
+```bash
+npm run check
+npm test
+npm run self-check
+```
+
+If your change affects an agent lifecycle, router, proxy, public hostname, WebSocket path, or browser UI, test the actual behavior as well.
+
+A green syntax check only proves that JavaScript can be parsed.
+
+It does not prove that OpenCode starts, Hermes connects, OpenClaw answers, VNC displays a desktop, or that the public URL points anywhere except a carefully maintained void.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+If you are reading this from a public deployment, congratulations: somebody decided the void needed an HTTP endpoint.

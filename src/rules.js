@@ -141,9 +141,10 @@ export function createRulesService(options = {}) {
     const hermesHome = path.resolve(env.HERMES_HOME || (process.platform === 'win32' ? path.join(env.LOCALAPPDATA || homeDir, 'hermes') : path.join(homeDir, '.hermes')));
     const openClawHome = path.resolve(env.OPENCLAW_HOME || path.join(homeDir, '.openclaw'));
     const deepSeekDir = path.resolve(env.DEEPSEEK_HARNESS_DIR || path.join(homeDir, 'deepseek-harness'));
+    const deepSeekHome = path.resolve(env.DSH_HOME || path.join(homeDir, '.dsh'));
     const agentZeroDir = path.resolve(env.AGENT_ZERO_DIR || path.join(homeDir, 'agent-zero'));
     const opencodeTarget = path.join(xdgConfigHome, 'opencode', 'AGENTS.md');
-    return { codexHome, hermesHome, openClawHome, deepSeekDir, agentZeroDir, opencodeTarget };
+    return { codexHome, hermesHome, openClawHome, deepSeekDir, deepSeekHome, agentZeroDir, opencodeTarget };
   }
 
   function detectAdapters() {
@@ -159,7 +160,10 @@ export function createRulesService(options = {}) {
       baseReport('opencode', opencodeInstalled, paths.opencodeTarget),
       baseReport('hermes', hermesInstalled, path.join(paths.hermesHome, 'SOUL.md')),
       baseReport('openclaw', openclawInstalled, path.join(paths.openClawHome, 'workspace', 'AGENTS.md')),
-      baseReport('deepseek', deepseekInstalled, path.join(paths.deepSeekDir, 'AGENTS.md')),
+      // DeepSeek Harness reserves $DSH_HOME/AGENTS.md for user-global
+      // instructions. Do not put shared rules in the harness checkout: that
+      // file is not consulted when a session opens another project.
+      baseReport('deepseek', deepseekInstalled, path.join(paths.deepSeekHome, 'AGENTS.md')),
       baseReport('agent-zero', agentZeroInstalled, null, 'unsupported')
     ];
   }

@@ -1,4 +1,5 @@
-When i send hi reply with yo,
+If i say hi reply with yo
+
 This agent is running on a remote Worker Agents host that is accessible in a browser.
 
 - Worker Agents dashboard: {{WORKER_PUBLIC_URL}}

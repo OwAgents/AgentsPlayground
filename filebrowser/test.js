@@ -43,11 +43,6 @@ async function waitForServer(proc, logs) {
 async function runTests() {
   console.log('Running automated backend sanity verification...');
 
-  const serverSource = require('fs').readFileSync(path.join(__dirname, 'server.js'), 'utf8');
-  assert.ok(!/fs\.(?:existsSync|statSync|mkdirSync)\s*\(/.test(serverSource),
-    'HTTP request paths must not use synchronous filesystem calls that deadlock browser-backed FUSE mounts');
-  console.log('✔ Request handlers avoid synchronous filesystem calls on FUSE paths');
-
   const storageRoot = path.resolve(process.env.STORAGE_DIR || '/');
   const appRel = path.relative(storageRoot, __dirname);
   const appRelParts = appRel ? appRel.split(path.sep) : [];
@@ -77,18 +72,6 @@ async function runTests() {
   const explorerRes = await request('/');
   assert.strictEqual(explorerRes.status, 200, 'GET / should return Explorer');
   assert.ok(explorerRes.raw.includes('File Explorer'), 'Explorer UI should render at /');
-  assert.ok(explorerRes.raw.includes('Mount local folder'), 'Explorer should expose the lazy browser folder mount action');
-  assert.ok(explorerRes.raw.includes('Snapshot picker'), 'Explorer should expose the compatible folder snapshot picker');
-  assert.ok(explorerRes.raw.includes('showDirectoryPicker'), 'Explorer should use the browser File System Access API');
-  const inlineScripts = Array.from(explorerRes.raw.matchAll(/<script>([\s\S]*?)<\/script>/g), (match) => match[1]);
-  assert.ok(inlineScripts.length > 0, 'Explorer should contain its browser application script');
-  for (const script of inlineScripts) Function(script);
-
-  const mountsRes = await request('/api/browser-mounts');
-  assert.strictEqual(mountsRes.status, 200, 'GET /api/browser-mounts should return capability state');
-  assert.strictEqual(typeof mountsRes.data.capability.supported, 'boolean');
-  assert.strictEqual(mountsRes.data.capability.readOnly, true);
-  assert.ok(Array.isArray(mountsRes.data.mounts));
 
   const browseRes = await request(browsePath);
   assert.strictEqual(browseRes.status, 200, 'GET /browse should return Explorer');

@@ -1,14 +1,11 @@
 const express = require('express');
 const fs = require('fs');
-const http = require('http');
 const os = require('os');
 const path = require('path');
 const multer = require('multer');
-const { BrowserMountManager } = require('./browser-mounts');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const browserMounts = new BrowserMountManager();
 
 // Root directory for file browsing. Defaults to the filesystem root so the
 // browser has full access to the system; set STORAGE_DIR to serve a subtree.
@@ -29,7 +26,8 @@ const storage = multer.diskStorage({
     if (!targetDir.startsWith(ROOT_DIR)) {
       return cb(new Error('Access denied'), null);
     }
-    fs.mkdir(targetDir, { recursive: true }, (error) => cb(error, error ? null : targetDir));
+    fs.mkdirSync(targetDir, { recursive: true });
+    cb(null, targetDir);
   },
   filename: function (req, file, cb) {
     cb(null, file.originalname);
@@ -76,6 +74,10 @@ app.get('/api/files', async (req, res) => {
   try {
     const relPath = req.query.path || '';
     const fullPath = safePath(relPath);
+    
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ error: 'Directory not found' });
+    }
 
     const stat = await fs.promises.stat(fullPath);
     if (!stat.isDirectory()) {
@@ -117,7 +119,6 @@ app.get('/api/files', async (req, res) => {
       items: result
     });
   } catch (err) {
-    if (err.code === 'ENOENT') return res.status(404).json({ error: 'Directory not found' });
     res.status(500).json({ error: err.message });
   }
 });
@@ -126,25 +127,24 @@ app.get('/api/files', async (req, res) => {
 app.get('/api/read', async (req, res) => {
   try {
     const fullPath = safePath(req.query.path);
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
     const content = await fs.promises.readFile(fullPath, 'utf8');
     res.json({ content, path: path.relative(ROOT_DIR, fullPath) });
   } catch (err) {
-    if (err.code === 'ENOENT') return res.status(404).json({ error: 'File not found' });
     res.status(500).json({ error: err.message });
   }
 });
 
 // API: Raw stream file for audio/video/image preview download
-app.get('/api/raw', async (req, res) => {
+app.get('/api/raw', (req, res) => {
   const fullPath = safePath(req.query.path);
-  try {
-    await fs.promises.access(fullPath, fs.constants.R_OK);
-    res.setHeader('Content-Disposition', 'inline');
-    return res.sendFile(fullPath, { dotfiles: 'allow' });
-  } catch (error) {
-    if (error.code === 'ENOENT') return res.status(404).send('File not found');
-    return res.status(500).send(error.message);
+  if (!fs.existsSync(fullPath)) {
+    return res.status(404).send('File not found');
   }
+  res.setHeader('Content-Disposition', 'inline');
+  res.sendFile(fullPath, { dotfiles: 'allow' });
 });
 
 // API: Save file content
@@ -170,11 +170,8 @@ app.post('/api/create', async (req, res) => {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    try {
-      await fs.promises.access(fullPath);
+    if (fs.existsSync(fullPath)) {
       return res.status(400).json({ error: 'Item already exists' });
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
     }
 
     if (isDir) {
@@ -210,29 +207,6 @@ app.post('/api/upload', upload.array('files'), (req, res) => {
   res.json({ success: true, count: req.files ? req.files.length : 0 });
 });
 
-// API: Lazy, read-only browser folder mounts. File bytes stay in the browser
-// until a process on the worker reads the corresponding FUSE path.
-app.get('/api/browser-mounts', (_req, res) => {
-  res.json({ capability: browserMounts.capability(), mounts: browserMounts.list() });
-});
-
-app.post('/api/browser-mounts', (req, res) => {
-  try {
-    const session = browserMounts.createSession(req.body?.name);
-    res.status(201).json({ ok: true, ...session });
-  } catch (error) {
-    res.status(error.statusCode || 500).json({ error: error.message });
-  }
-});
-
-app.delete('/api/browser-mounts/:id', async (req, res) => {
-  if (!browserMounts.sessions.has(req.params.id)) {
-    return res.status(404).json({ error: 'Browser folder mount not found.' });
-  }
-  await browserMounts.stopSession(req.params.id, 'Unmounted from File Browser.');
-  return res.json({ ok: true });
-});
-
 // API: Default path for a fresh Explorer load.
 app.get('/api/start', (req, res) => {
   res.json({ path: START_PATH });
@@ -241,11 +215,11 @@ app.get('/api/start', (req, res) => {
 app.get(['/', '/explorer', '/browse'], (req, res) => sendExplorer(res));
 
 // Directory routes render Explorer; file routes stream the raw file for viewing.
-app.get('/browse/*', async (req, res) => {
+app.get('/browse/*', (req, res) => {
   const relPath = decodeRouteSegment(req.params[0]);
   const fullPath = safePath(relPath);
   try {
-    const stat = await fs.promises.stat(fullPath);
+    const stat = fs.statSync(fullPath);
     if (stat.isDirectory()) return sendExplorer(res);
     if (stat.isFile()) {
       return res.sendFile(fullPath, { dotfiles: 'allow' }, (error) => {
@@ -264,11 +238,11 @@ app.get('/edit', (req, res) => {
 });
 
 // Edit routes render Explorer with the editor opened for the target text file.
-app.get('/edit/*', async (req, res) => {
+app.get('/edit/*', (req, res) => {
   const relPath = decodeRouteSegment(req.params[0]);
   const fullPath = safePath(relPath);
   try {
-    const stat = await fs.promises.stat(fullPath);
+    const stat = fs.statSync(fullPath);
     if (!stat.isFile()) return res.status(400).json({ error: 'Expected file path' });
     if (getFileType(fullPath) !== 'text') return res.status(415).json({ error: 'Only text files are editable' });
     return sendExplorer(res);
@@ -277,31 +251,11 @@ app.get('/edit/*', async (req, res) => {
   }
 });
 
-const server = http.createServer(app);
-
-server.on('upgrade', (req, socket, head) => {
-  if (browserMounts.handleUpgrade(req, socket, head)) return;
-  socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
-});
-
-async function shutdown() {
-  await browserMounts.stopAll();
-  server.close(() => process.exit(0));
-  setTimeout(() => process.exit(1), 5000).unref();
-}
-
-process.once('SIGINT', shutdown);
-process.once('SIGTERM', shutdown);
-
-server.listen(PORT, () => {
+app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
   console.log(`Serving filesystem root: ${ROOT_DIR}`);
   console.log(`Default start directory: ${START_PATH || ROOT_DIR}`);
   console.log(`File Explorer: http://localhost:${PORT}/`);
   console.log(`Browse directory: http://localhost:${PORT}/browse/<path>`);
   console.log(`Edit text file: http://localhost:${PORT}/edit/<path>`);
-  const mountCapability = browserMounts.capability();
-  console.log(mountCapability.supported
-    ? `Browser folder mounts: ${mountCapability.mountRoot}`
-    : `Browser folder mounts unavailable: ${mountCapability.error}`);
 });

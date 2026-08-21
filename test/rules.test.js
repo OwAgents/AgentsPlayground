@@ -73,6 +73,7 @@ test('custom homes inject supported adapters and skip Agent Zero', () => {
     HERMES_HOME: path.join(root, 'hermes-home'),
     OPENCLAW_HOME: path.join(root, 'claw-home'),
     DEEPSEEK_HARNESS_DIR: path.join(root, 'deepseek'),
+    DSH_HOME: path.join(root, 'dsh-home'),
     AGENT_ZERO_DIR: path.join(root, 'agent-zero'),
     WORKER_AGENTS_URL: 'https://worker-test-worker-agents-1456.agentsweb.space/'
   };
@@ -102,6 +103,9 @@ test('custom homes inject supported adapters and skip Agent Zero', () => {
   assert.equal((fs.readFileSync(openCodePath, 'utf8').match(new RegExp(RULES_START, 'g')) || []).length, 1);
   assert.ok(fs.existsSync(path.join(env.HERMES_HOME, 'SOUL.md')));
   assert.equal(fs.existsSync(path.join(env.HERMES_HOME, 'AGENTS.md')), false);
+  const deepSeekGlobalPath = path.join(env.DSH_HOME, 'AGENTS.md');
+  assert.equal((fs.readFileSync(deepSeekGlobalPath, 'utf8').match(new RegExp(RULES_START, 'g')) || []).length, 1);
+  assert.equal(fs.existsSync(path.join(env.DEEPSEEK_HARNESS_DIR, 'AGENTS.md')), false);
   const agentZero = payload.adapters.find((item) => item.id === 'agent-zero');
   assert.deepEqual({ installed: agentZero.installed, injected: agentZero.injected, skipped: agentZero.skipped, reason: agentZero.reason, targetPath: agentZero.targetPath }, {
     installed: true, injected: false, skipped: true, reason: 'unsupported', targetPath: null

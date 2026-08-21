@@ -20,10 +20,6 @@ A standalone web-based file manager with a Windows 11 File Explorer UI.
   - Directory creation & navigation
   - File & folder deletion
   - Icon & details list view toggles
-- **Lazy local folder mounts (Linux workers)**: choose a folder in the browser
-  and expose it read-only below `~/browser-mounts/`. Mounting does not copy the
-  folder: directory names, metadata, and exact file byte ranges are requested
-  over WebSocket only when a worker process accesses them.
 - **Full System Access**: Rooted at `/` with no login and no sandbox. Reads,
   edits, uploads, and deletes anywhere the OS user has permissions.
 
@@ -42,29 +38,10 @@ The Explorer opens on the current user's home directory by default
 (`process.env.HOME` / `os.homedir()`). Set `START_DIR` to change the landing
 folder (for example `START_DIR=/`) while keeping full system access.
 
-Browser folder mounting requires a Linux worker with accessible `/dev/fuse`,
-`libfuse`, and the optional `@cocalc/fuse-native` binding. Worker Agents installs
-the build/runtime dependencies before it installs File Browser. The selected
-folder remains on the browser's computer and is available only while that page
-stays connected. Chrome and Edge use `showDirectoryPicker()`; other browsers
-fall back to a `webkitdirectory` session snapshot. Both paths defer file-content
-transfer until a file is read. Chromium users can explicitly choose **Snapshot
-picker** when native directory handles are unavailable or undesirable. The mount
-is deliberately read-only.
-
-Configuration:
-
-- `BROWSER_MOUNT_ROOT`: worker directory that owns mountpoints; defaults to
-  `~/browser-mounts`.
-- A worker/container must expose `/dev/fuse`; Docker also requires the normal
-  FUSE device/capability configuration.
-
 Default access points:
 - Explorer UI: `http://localhost:3000/`
 - Browse a folder: `http://localhost:3000/browse/work`
 - Edit a text file: `http://localhost:3000/edit/README.md`
 
-Run the backend sanity checks with `npm test`. They verify lazy range reads,
-read-only enforcement, disconnect cleanup, routes, and full system access. The
-FUSE protocol tests use an injected fake binding so they also run on macOS;
-final acceptance still requires a real Linux `/dev/fuse` mount.
+Run the backend sanity checks with `npm test` (starts its own server on :3847
+and verifies routing plus full system access).

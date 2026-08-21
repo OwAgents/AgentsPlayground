@@ -81,18 +81,8 @@
       font-size: 12px;
     }
     .tool-btn:hover { background: var(--win-hover); }
-    .tool-btn:disabled { cursor: not-allowed; opacity: 0.5; }
     .tool-btn i { font-size: 14px; color: var(--win-accent); }
     .divider { width: 1px; height: 24px; background: var(--win-border); margin: 0 4px; }
-    .mount-strip {
-      min-height: 34px; background: #eef6ff; border-bottom: 1px solid #cce8ff;
-      display: flex; align-items: center; gap: 8px; padding: 5px 12px; color: #245a84;
-    }
-    .mount-strip.error { background: #fff1f1; border-color: #ffd1d1; color: #9f2f2f; }
-    .mount-strip.mounted { background: #edf8f1; border-color: #c7ead3; color: #236b3b; }
-    .mount-strip .mount-message { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .mount-strip code { font-family: Consolas, monospace; font-size: 11px; }
-    .mount-strip button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 11px; font-weight: 600; }
 
     /* Address Bar Bar */
     .address-row {
@@ -249,22 +239,12 @@
     <button class="tool-btn" id="btn-new-file"><i class="fa-solid fa-file-circle-plus"></i> New file</button>
     <button class="tool-btn" id="btn-new-folder"><i class="fa-solid fa-folder-plus"></i> New folder</button>
     <button class="tool-btn" id="btn-upload"><i class="fa-solid fa-upload"></i> Upload</button>
-    <button class="tool-btn" id="btn-mount-folder" title="Expose a local folder as a lazy, read-only filesystem on this worker"><i class="fa-solid fa-link"></i> Mount local folder</button>
     <div class="divider"></div>
     <button class="tool-btn" id="btn-delete"><i class="fa-solid fa-trash-can" style="color:#e04343;"></i> Delete</button>
     <div class="divider"></div>
     <button class="tool-btn" id="btn-view-grid"><i class="fa-solid fa-grip"></i> Icons</button>
     <button class="tool-btn" id="btn-view-details"><i class="fa-solid fa-list"></i> Details</button>
     <input type="file" id="upload-input" multiple style="display:none;" />
-    <input type="file" id="mount-folder-input" webkitdirectory multiple style="display:none;" />
-  </div>
-
-  <div class="mount-strip" id="mount-strip">
-    <i class="fa-solid fa-cloud-arrow-down"></i>
-    <span class="mount-message" id="mount-message">Local folders stay on your computer; file bytes cross the network only when the worker reads them.</span>
-    <button id="mount-compatible">Snapshot picker</button>
-    <button id="mount-open" style="display:none;">Open mount</button>
-    <button id="mount-stop" style="display:none;">Unmount</button>
   </div>
 
   <!-- Address Bar -->
@@ -349,255 +329,6 @@
     const modalTitle = document.getElementById('modal-title');
     const modalBody = document.getElementById('modal-body');
     const modalSave = document.getElementById('modal-save');
-    const mountButton = document.getElementById('btn-mount-folder');
-    const mountFolderInput = document.getElementById('mount-folder-input');
-    const mountStrip = document.getElementById('mount-strip');
-    const mountMessage = document.getElementById('mount-message');
-    const mountCompatible = document.getElementById('mount-compatible');
-    const mountOpen = document.getElementById('mount-open');
-    const mountStop = document.getElementById('mount-stop');
-    let browserMount = null;
-    let mountCapability = null;
-
-    function mountPathParts(remotePath) {
-      const parts = String(remotePath || '/').split('/').filter(Boolean);
-      if (parts.some((part) => part === '.' || part === '..' || part.includes('\\'))) {
-        throw Object.assign(new Error('Invalid browser mount path.'), { code: 'EACCES' });
-      }
-      return parts;
-    }
-
-    function operationError(error) {
-      const name = error?.name || '';
-      const code = error?.code
-        || (name === 'NotFoundError' ? 'ENOENT' : name === 'TypeMismatchError' ? 'ENOTDIR' : name === 'NotAllowedError' ? 'EACCES' : 'EIO');
-      return { code, message: error?.message || 'Browser filesystem operation failed.' };
-    }
-
-    function escapeMountHtml(value) {
-      return String(value)
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;');
-    }
-
-    function bytesToBase64(bytes) {
-      let binary = '';
-      const block = 0x8000;
-      for (let offset = 0; offset < bytes.length; offset += block) {
-        binary += String.fromCharCode(...bytes.subarray(offset, offset + block));
-      }
-      return btoa(binary);
-    }
-
-    class HandleFolderProvider {
-      constructor(root) {
-        this.root = root;
-        this.name = root.name || 'local-folder';
-      }
-
-      async resolve(remotePath) {
-        const parts = mountPathParts(remotePath);
-        let handle = this.root;
-        for (let index = 0; index < parts.length; index += 1) {
-          if (handle.kind !== 'directory') throw Object.assign(new Error('Path component is not a directory.'), { code: 'ENOTDIR' });
-          const name = parts[index];
-          const final = index === parts.length - 1;
-          if (!final) {
-            handle = await handle.getDirectoryHandle(name);
-            continue;
-          }
-          try {
-            handle = await handle.getDirectoryHandle(name);
-          } catch (error) {
-            if (error.name !== 'TypeMismatchError' && error.name !== 'NotFoundError') throw error;
-            handle = await handle.getFileHandle(name);
-          }
-        }
-        return handle;
-      }
-
-      async getattr(remotePath) {
-        const handle = await this.resolve(remotePath);
-        if (handle.kind === 'directory') return { kind: 'directory', size: 0, mtime: Date.now() };
-        const file = await handle.getFile();
-        return { kind: 'file', size: file.size, mtime: file.lastModified };
-      }
-
-      async readdir(remotePath) {
-        const handle = await this.resolve(remotePath);
-        if (handle.kind !== 'directory') throw Object.assign(new Error('Path is not a directory.'), { code: 'ENOTDIR' });
-        const names = [];
-        for await (const name of handle.keys()) names.push(name);
-        names.sort((a, b) => a.localeCompare(b));
-        return { names };
-      }
-
-      async open(remotePath, expectedKind = 'file') {
-        const handle = await this.resolve(remotePath);
-        if (handle.kind !== expectedKind) {
-          throw Object.assign(new Error(expectedKind === 'file' ? 'Path is a directory.' : 'Path is not a directory.'), {
-            code: expectedKind === 'file' ? 'EISDIR' : 'ENOTDIR'
-          });
-        }
-        return {};
-      }
-
-      async read(remotePath, position, length) {
-        const handle = await this.resolve(remotePath);
-        if (handle.kind !== 'file') throw Object.assign(new Error('Path is a directory.'), { code: 'EISDIR' });
-        const file = await handle.getFile();
-        const bytes = new Uint8Array(await file.slice(position, position + length).arrayBuffer());
-        return { data: bytesToBase64(bytes) };
-      }
-
-      handle(request) {
-        if (request.op === 'getattr') return this.getattr(request.path);
-        if (request.op === 'readdir') return this.readdir(request.path);
-        if (request.op === 'open') return this.open(request.path, 'file');
-        if (request.op === 'opendir') return this.open(request.path, 'directory');
-        if (request.op === 'read') return this.read(request.path, request.position, request.length);
-        throw Object.assign(new Error(`Unsupported filesystem operation: ${request.op}`), { code: 'ENOSYS' });
-      }
-    }
-
-    class FileListFolderProvider {
-      constructor(files) {
-        this.nodes = new Map([['/', { kind: 'directory', children: new Set(), mtime: Date.now() }]]);
-        const firstPath = files[0]?.webkitRelativePath || files[0]?.name || 'local-folder';
-        this.name = firstPath.split('/')[0] || 'local-folder';
-        for (const file of files) this.addFile(file);
-      }
-
-      addFile(file) {
-        const raw = file.webkitRelativePath || file.name;
-        const parts = raw.split('/').filter(Boolean);
-        if (parts[0] === this.name) parts.shift();
-        let current = '/';
-        for (let index = 0; index < parts.length; index += 1) {
-          const name = parts[index];
-          const child = current === '/' ? `/${name}` : `${current}/${name}`;
-          this.nodes.get(current).children.add(name);
-          if (index === parts.length - 1) {
-            this.nodes.set(child, { kind: 'file', file, size: file.size, mtime: file.lastModified });
-          } else if (!this.nodes.has(child)) {
-            this.nodes.set(child, { kind: 'directory', children: new Set(), mtime: Date.now() });
-          }
-          current = child;
-        }
-      }
-
-      node(remotePath) {
-        const normalized = `/${mountPathParts(remotePath).join('/')}`;
-        const node = this.nodes.get(normalized);
-        if (!node) throw Object.assign(new Error('Path does not exist.'), { code: 'ENOENT' });
-        return node;
-      }
-
-      async handle(request) {
-        const node = this.node(request.path);
-        if (request.op === 'getattr') return { kind: node.kind, size: node.size || 0, mtime: node.mtime };
-        if (request.op === 'readdir') {
-          if (node.kind !== 'directory') throw Object.assign(new Error('Path is not a directory.'), { code: 'ENOTDIR' });
-          return { names: Array.from(node.children).sort((a, b) => a.localeCompare(b)) };
-        }
-        if (request.op === 'open' || request.op === 'opendir') {
-          const expected = request.op === 'open' ? 'file' : 'directory';
-          if (node.kind !== expected) throw Object.assign(new Error('Path type does not match operation.'), { code: expected === 'file' ? 'EISDIR' : 'ENOTDIR' });
-          return {};
-        }
-        if (request.op === 'read') {
-          if (node.kind !== 'file') throw Object.assign(new Error('Path is a directory.'), { code: 'EISDIR' });
-          const bytes = new Uint8Array(await node.file.slice(request.position, request.position + request.length).arrayBuffer());
-          return { data: bytesToBase64(bytes) };
-        }
-        throw Object.assign(new Error(`Unsupported filesystem operation: ${request.op}`), { code: 'ENOSYS' });
-      }
-    }
-
-    function setMountStatus(state, message) {
-      mountStrip.classList.toggle('mounted', state === 'mounted');
-      mountStrip.classList.toggle('error', state === 'error');
-      mountMessage.innerHTML = message;
-      mountButton.disabled = mountCapability?.supported === false || ['connecting', 'mounting', 'mounted'].includes(state);
-      mountCompatible.style.display = mountCapability?.supported !== false && !['connecting', 'mounting', 'mounted'].includes(state) ? 'inline' : 'none';
-      mountOpen.style.display = state === 'mounted' ? 'inline' : 'none';
-      mountStop.style.display = ['connecting', 'mounting', 'mounted'].includes(state) ? 'inline' : 'none';
-    }
-
-    async function connectBrowserFolder(provider) {
-      setMountStatus('connecting', 'Creating a private mount session…');
-      const response = await fetch('/api/browser-mounts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: provider.name })
-      });
-      const session = await response.json();
-      if (!response.ok) throw new Error(session.error || 'Could not create browser folder mount.');
-
-      const websocketUrl = new URL(session.websocketPath, window.location.href);
-      websocketUrl.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const socket = new WebSocket(websocketUrl);
-      browserMount = { ...session, socket, provider };
-      setMountStatus('mounting', `Connecting <strong>${escapeMountHtml(provider.name)}</strong> to the worker…`);
-
-      socket.onmessage = async (event) => {
-        let request;
-        try {
-          request = JSON.parse(event.data);
-        } catch {
-          return;
-        }
-        if (request.type === 'state') {
-          if (request.state === 'mounted') {
-            browserMount.mountPath = request.mountPath;
-            setMountStatus('mounted', `<strong>${escapeMountHtml(provider.name)}</strong> is mounted read-only at <code>${escapeMountHtml(request.mountPath)}</code>. Keep this tab open.`);
-          } else if (request.state === 'error') {
-            setMountStatus('error', request.error || 'Mount failed.');
-          }
-          return;
-        }
-        if (request.type !== 'request') return;
-        try {
-          const result = await provider.handle(request);
-          socket.send(JSON.stringify({ type: 'response', id: request.id, ok: true, result }));
-        } catch (error) {
-          socket.send(JSON.stringify({ type: 'response', id: request.id, ok: false, error: operationError(error) }));
-        }
-      };
-      socket.onerror = () => setMountStatus('error', 'The browser-to-worker filesystem connection failed.');
-      socket.onclose = () => {
-        if (browserMount?.socket !== socket) return;
-        browserMount = null;
-        setMountStatus('idle', 'Local folder disconnected. File contents are no longer available to the worker.');
-      };
-    }
-
-    async function chooseAndMountFolder() {
-      try {
-        if (!mountCapability?.supported) throw new Error(mountCapability?.error || 'Browser folder mounting is unavailable on this worker.');
-        if ('showDirectoryPicker' in window) {
-          const root = await window.showDirectoryPicker({ mode: 'read', id: 'worker-agents-browser-mount' });
-          await connectBrowserFolder(new HandleFolderProvider(root));
-        } else {
-          mountFolderInput.click();
-        }
-      } catch (error) {
-        if (error.name === 'AbortError') return;
-        setMountStatus('error', operationError(error).message);
-      }
-    }
-
-    async function stopBrowserMount() {
-      const active = browserMount;
-      browserMount = null;
-      if (!active) return;
-      active.socket?.close();
-      await fetch(`/api/browser-mounts/${encodeURIComponent(active.id)}`, { method: 'DELETE', keepalive: true }).catch(() => {});
-      setMountStatus('idle', 'Local folder unmounted. No local file contents remain on the worker.');
-    }
 
     function decodePath(value) {
       try {
@@ -878,24 +609,6 @@
       loadFiles(currentPath);
     };
 
-    mountButton.onclick = chooseAndMountFolder;
-    mountCompatible.onclick = () => mountFolderInput.click();
-    mountFolderInput.onchange = async () => {
-      if (!mountFolderInput.files.length) return;
-      try {
-        await connectBrowserFolder(new FileListFolderProvider(Array.from(mountFolderInput.files)));
-      } catch (error) {
-        setMountStatus('error', operationError(error).message);
-      } finally {
-        mountFolderInput.value = '';
-      }
-    };
-    mountOpen.onclick = () => {
-      if (!browserMount?.mountPath) return;
-      loadFiles(browserMount.mountPath.replace(/^\/+/, ''));
-    };
-    mountStop.onclick = stopBrowserMount;
-
     document.getElementById('modal-close').onclick = () => modal.classList.remove('active');
     document.getElementById('modal-cancel').onclick = () => modal.classList.remove('active');
     document.onclick = () => { selectedItem = null; render(); updateStatus(); };
@@ -904,18 +617,6 @@
     // Initial load. Landing on an explicit path stays put; landing on the
     // bare Explorer (/) starts in the user's home directory by default.
     (async function initialLoad() {
-      try {
-        const mountResponse = await fetch('/api/browser-mounts');
-        const mountData = await mountResponse.json();
-        mountCapability = mountData.capability;
-        if (!mountCapability.supported) {
-          mountButton.disabled = true;
-          setMountStatus('error', mountCapability.error || 'Browser folder mounting is unavailable on this worker.');
-        }
-      } catch {
-        mountCapability = { supported: false, error: 'Could not determine browser mount capability.' };
-        mountButton.disabled = true;
-      }
       const initialRoute = parseRoute();
       if (initialRoute.mode === 'edit' && initialRoute.path) {
         loadFiles(parentPath(initialRoute.path), true);
@@ -937,11 +638,6 @@
       } else {
         loadFiles(route.path, true);
       }
-    });
-    window.addEventListener('beforeunload', () => {
-      if (!browserMount) return;
-      fetch(`/api/browser-mounts/${encodeURIComponent(browserMount.id)}`, { method: 'DELETE', keepalive: true }).catch(() => {});
-      browserMount.socket?.close();
     });
   </script>
 </body>
