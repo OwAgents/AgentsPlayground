@@ -65,6 +65,38 @@ function execPowerShell(command) {
   }
 }
 
+function findLinuxProcListener(port) {
+  if (process.platform !== 'linux') return null;
+  const portHex = Number(port).toString(16).toUpperCase().padStart(4, '0');
+  const socketInodes = new Set();
+  for (const table of ['/proc/net/tcp', '/proc/net/tcp6']) {
+    let rows = [];
+    try { rows = fs.readFileSync(table, 'utf8').trim().split('\n').slice(1); } catch { continue; }
+    for (const row of rows) {
+      const fields = row.trim().split(/\s+/);
+      const localPort = fields[1]?.split(':').at(-1)?.toUpperCase();
+      if (localPort === portHex && fields[3] === '0A' && fields[9]) socketInodes.add(fields[9]);
+    }
+  }
+  if (!socketInodes.size) return null;
+  let processDirs = [];
+  try { processDirs = fs.readdirSync('/proc', { withFileTypes: true }); } catch { return -1; }
+  for (const entry of processDirs) {
+    if (!entry.isDirectory() || !/^\d+$/.test(entry.name)) continue;
+    const fdDir = `/proc/${entry.name}/fd`;
+    let fds = [];
+    try { fds = fs.readdirSync(fdDir); } catch { continue; }
+    for (const fd of fds) {
+      let target = '';
+      try { target = fs.readlinkSync(path.join(fdDir, fd)); } catch { continue; }
+      const match = target.match(/^socket:\[(\d+)\]$/);
+      if (match && socketInodes.has(match[1])) return Number.parseInt(entry.name, 10);
+    }
+  }
+  // The socket is listening, but procfs permissions hid its owning process.
+  return -1;
+}
+
 function findRouterPackagePath() {
   if (!fs.existsSync(ROUTER_PACKAGE_JSON)) {
     throw new Error(`${ROUTER_NPM_PACKAGE} is missing from Worker Agents node_modules; run npm ci in ${config.projectRoot}`);
@@ -117,7 +149,7 @@ function findListenerForPort(port) {
     const match = lsofRows[1].match(/^\S+\s+(\d+)\s/);
     return match ? Number.parseInt(match[1], 10) : null;
   }
-  return null;
+  return findLinuxProcListener(port);
 }
 
 function killExistingListeners() {
