@@ -19,6 +19,7 @@ node node_modules/9router-vibefin/app/server.js
 
 - Treat 9Router `/api/health` as process liveness only. Worker Agents becomes ready only after local `GET /v1/models` returns a non-empty catalog; public deployment then requires Worker Agents `/api/ready`, public `GET /v1/models`, and a non-streaming `POST /v1/chat/completions` canary.
 - On macOS, 9Router listener detection needs an `lsof`/`netstat` fallback; Linux-only `ss` checks can incorrectly report “not running”.
+- Minimal Linux containers may omit `ss`, `netstat`, and `lsof`. Listener detection must retain the `/proc/net/tcp*` socket-inode fallback or a healthy router will be reported as stopped and duplicate starts will fail with `EADDRINUSE`.
 - OpenCode worker preset: starts near port `18924`
 - OpenCode is configured with an explicit `9router` OpenAI-compatible provider from the live `GET /v1/models` response; the built-in `openai` provider is disabled so the worker does not expose or fall back to OpenAI.
 - Agent Zero worker preset: starts near port `18955`, clones `agent0ai/agent-zero` to `~/agent-zero`, creates `.venv`, installs `requirements.txt`, and runs `python run_ui.py` directly on the worker. It writes `~/agent-zero-usr/plugins/_model_config/presets.yaml` so chat and utility use 9Router at `http://127.0.0.1:20128/v1`; do not run this preset in Docker on workers.
