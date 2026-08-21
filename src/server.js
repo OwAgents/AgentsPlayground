@@ -585,7 +585,7 @@ async function handleRequest(req, res) {
   }
 
   if (url.pathname === '/api/skills-hub' && req.method === 'GET') {
-    sendJson(res, 200, { installed: listInstalledSkills(), baseline: baselineStatus(), setup: getSetupStatus() });
+    sendJson(res, 200, { installed: listInstalledSkills(), baseline: await baselineStatus(), setup: getSetupStatus() });
     return;
   }
 

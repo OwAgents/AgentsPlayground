@@ -1,7 +1,7 @@
 FROM node:20-bookworm-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git openssh-client procps libfuse2 libfuse-dev build-essential python3 pkg-config \
+    && apt-get install -y --no-install-recommends ca-certificates git openssh-client procps libfuse2 libfuse-dev build-essential python3 pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

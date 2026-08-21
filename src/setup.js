@@ -113,7 +113,7 @@ async function stepVerify() {
 
 async function stepSkills() {
   const results = [];
-  for (const skill of baselineSkills()) {
+  for (const skill of await baselineSkills()) {
     try {
       const installed = await installSkill(skill.source, skill.name);
       results.push({ name: skill.name, installed: true, path: installed.path });

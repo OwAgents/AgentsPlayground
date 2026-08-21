@@ -7,8 +7,12 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 const SEARCH_TIMEOUT_MS = 60_000;
 const INSTALL_TIMEOUT_MS = 120_000;
-const BASELINE_MANIFEST_PATH = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'skills', 'manifest.json');
+const SKILLS_REPOSITORY = process.env.WORKER_AGENTS_SKILLS_REPOSITORY || 'agents-dev/skills';
+const SKILLS_BRANCH = process.env.WORKER_AGENTS_SKILLS_BRANCH || 'main';
+const SKILLS_TREE_URL = `https://api.github.com/repos/${SKILLS_REPOSITORY}/git/trees/${SKILLS_BRANCH}?recursive=1`;
+const SKILLS_DISCOVERY_TIMEOUT_MS = 15_000;
 const UNIVERSAL_AGENT_ARGS = ['--global', '--agent', '*'];
+let baselineSkillsPromise;
 
 function skillRoots() {
   const roots = [
@@ -55,16 +59,51 @@ export function listInstalledSkills() {
   return [...skills.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function baselineSkills() {
-  try {
-    const manifest = JSON.parse(fs.readFileSync(BASELINE_MANIFEST_PATH, 'utf8'));
-    return Array.isArray(manifest.skills) ? manifest.skills.map((skill) => ({ ...skill })) : [];
-  } catch { return []; }
+export function parseSkillsTree(tree) {
+  const skills = new Map();
+  for (const entry of Array.isArray(tree) ? tree : []) {
+    const match = String(entry?.path || '').match(/^skills\/([^/]+)\/SKILL\.md$/);
+    if (!match || entry.type !== 'blob') continue;
+    const name = match[1];
+    skills.set(name, {
+      name,
+      source: `${SKILLS_REPOSITORY}@${name}`,
+      required: true,
+      path: entry.path
+    });
+  }
+  return [...skills.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function baselineStatus() {
+async function discoverBaselineSkills() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SKILLS_DISCOVERY_TIMEOUT_MS);
+  try {
+    const response = await fetch(SKILLS_TREE_URL, {
+      headers: { accept: 'application/vnd.github+json' },
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`Skills repository discovery failed with HTTP ${response.status}.`);
+    const payload = await response.json();
+    return parseSkillsTree(payload.tree);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export function baselineSkills() {
+  if (!baselineSkillsPromise) {
+    baselineSkillsPromise = discoverBaselineSkills().catch((error) => {
+      console.warn(`[skills] Unable to discover baseline skills: ${error.message}`);
+      return [];
+    });
+  }
+  return baselineSkillsPromise.then((skills) => skills.map((skill) => ({ ...skill })));
+}
+
+export async function baselineStatus() {
   const installed = new Map(listInstalledSkills().map((skill) => [skill.name, skill]));
-  return baselineSkills().map((skill) => ({ ...skill, installed: installed.has(skill.name), path: installed.get(skill.name)?.path || '' }));
+  return (await baselineSkills()).map((skill) => ({ ...skill, installed: installed.has(skill.name), path: installed.get(skill.name)?.path || '' }));
 }
 
 export function parseSkillSearchOutput(output, installedNames = new Set()) {

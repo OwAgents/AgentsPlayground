@@ -3,7 +3,22 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { installSkill, parseSkillSearchOutput, removeSkill } from '../src/skill-hub.js';
+import { installSkill, parseSkillSearchOutput, parseSkillsTree, removeSkill } from '../src/skill-hub.js';
+
+test('discovers every top-level bundled skill from the repository tree', () => {
+  assert.deepEqual(parseSkillsTree([
+    { path: 'skills/image-search/SKILL.md', type: 'blob' },
+    { path: 'skills/gauntlet-loop/SKILL.md', type: 'blob' },
+    { path: 'skills/mcp-duckgo/SKILL.md', type: 'blob' },
+    { path: 'skills/image-search/scripts/image_search.py', type: 'blob' },
+    { path: 'README.md', type: 'blob' },
+    { path: 'skills/not-a-skill/SKILL.md', type: 'tree' }
+  ]), [
+    { name: 'gauntlet-loop', path: 'skills/gauntlet-loop/SKILL.md', required: true, source: 'agents-dev/skills@gauntlet-loop' },
+    { name: 'image-search', path: 'skills/image-search/SKILL.md', required: true, source: 'agents-dev/skills@image-search' },
+    { name: 'mcp-duckgo', path: 'skills/mcp-duckgo/SKILL.md', required: true, source: 'agents-dev/skills@mcp-duckgo' }
+  ]);
+});
 
 test('parses skills CLI results and merges installed state', () => {
   const output = `\u001b[32macme/tools@browser-use 12.4K installs\u001b[0m\n└ https://skills.sh/acme/tools/browser-use\nother/repo@writer 90 installs\n└ https://skills.sh/other/repo/writer\n`;

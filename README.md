@@ -328,13 +328,12 @@ The skill system supports:
 - removing skills;
 - checking the current baseline.
 
-The manifest is stored at:
-
-```text
-skills/manifest.json
-```
-
-Skills are installed into the configured Worker Agents environment and can then be reconciled into supported agents.
+The bundled baseline skill sources are published in the
+[agents-dev/skills](https://github.com/agents-dev/skills) repository. Skills are
+installed into the configured Worker Agents environment and can then be
+reconciled into supported agents. Worker Agents discovers every
+`skills/<name>/SKILL.md` in that repository at runtime, so adding a skill there
+does not require updating a second manifest.
 
 ## File Browser
 
