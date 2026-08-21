@@ -1,7 +1,9 @@
 FROM node:22-bookworm-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates git openssh-client procps \
+    && apt-get install -y --no-install-recommends \
+      build-essential ca-certificates curl dbus-x11 fluxbox git libfuse-dev libfuse2 lsof \
+      novnc openssh-client pkg-config procps python3 python3-venv websockify x11vnc xterm xvfb \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

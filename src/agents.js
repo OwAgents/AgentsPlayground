@@ -628,7 +628,23 @@ async function ensureAgentZeroInstalled(log) {
   const python = agentZeroPython();
   const marker = path.join(dir, '.venv', '.worker-agents-installed');
   if (!fs.existsSync(python)) {
-    await runCommand(`cd "${dir}" && python3 -m venv .venv`, { onData: log });
+    const systemPythonIsCompatible = await runCommand(
+      'python3 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)"'
+    ).then(() => true, () => false);
+    if (systemPythonIsCompatible) {
+      await runCommand(`cd "${dir}" && python3 -m venv .venv`, { onData: log });
+    } else {
+      const uvInstall = [
+        'uv_bin="$(command -v uv || true)"',
+        'if [ -z "$uv_bin" ]; then for candidate in "$HOME/.local/bin/uv" "$HOME/.hermes/bin/uv"; do if [ -x "$candidate" ]; then uv_bin="$candidate"; break; fi; done; fi',
+        'if [ -z "$uv_bin" ]; then curl -LsSf https://astral.sh/uv/install.sh | sh; uv_bin="$HOME/.local/bin/uv"; fi',
+        '"$uv_bin" python install 3.12',
+        `"$uv_bin" venv --python 3.12 "${path.join(dir, '.venv')}"`,
+        `"${python}" -m ensurepip --upgrade`
+      ].join(' && ');
+      log('[agent-zero] system Python is older than 3.12; installing a managed compatible runtime');
+      await runCommand(uvInstall, { onData: log });
+    }
   }
   if (!fs.existsSync(marker)) {
     const hasCoreDeps = fs.existsSync(python) && await runCommand(
@@ -709,11 +725,11 @@ async function ensureWebVncInstalled(log) {
   if (process.platform !== 'linux') {
     throw new Error(`Web VNC is unsupported on ${process.platform}.`);
   }
-  const required = ['Xvfb', 'fluxbox', 'x11vnc', 'websockify'];
+  const required = ['Xvfb', 'fluxbox', 'x11vnc', 'websockify', 'lsof'];
   if (required.every(commandExists) && fs.existsSync('/usr/share/novnc/vnc.html')) return false;
   const installCommand = typeof process.getuid === 'function' && process.getuid() === 0
-    ? 'apt-get update && env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends xvfb fluxbox x11vnc novnc websockify xterm dbus-x11'
-    : 'sudo -n apt-get update && sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends xvfb fluxbox x11vnc novnc websockify xterm dbus-x11';
+    ? 'apt-get update && env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends xvfb fluxbox x11vnc novnc websockify xterm dbus-x11 lsof'
+    : 'sudo -n apt-get update && sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends xvfb fluxbox x11vnc novnc websockify xterm dbus-x11 lsof';
   await runCommand(
     installCommand,
     { onData: log }
@@ -1230,6 +1246,23 @@ const builtInDefinitions = [
       const suffix = token ? `?token=${encodeURIComponent(token)}` : '';
       return `http://${browserHost}:${port}/${suffix}`;
     }
+  },
+  {
+    id: 'filebrowser',
+    name: 'File Browser',
+    basePort: 18965,
+    path: '/',
+    command: (port) => applyPortTemplate(
+      commandFromEnv('AGENT_CMD_FILEBROWSER', defaultFileBrowserCommand(port)),
+      port
+    ),
+    readyPath: '/api/files',
+    readyPatterns: [/Server running at http:\/\/localhost:/i, /File Explorer:/i],
+    beforeReinstall: freshInstallFileBrowser,
+    beforeStart: async (_port, log) => {
+      await ensureFileBrowserInstalled(log);
+    },
+    env: () => buildBaseEnv()
   },
   {
     id: 'web-vnc',
